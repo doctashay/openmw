@@ -665,10 +665,22 @@ set(Boost_USE_STATIC_LIBS OFF)
 set(Boost_USE_STATIC_RUNTIME OFF)
 
 # Minimum required: Boost 1.70.0. Newer versions (1.76, 1.80, 1.85+) should work fine.
-# For MacPorts installations, Boost is typically in /opt/local
+# For MacPorts installations, Boost libraries are in /opt/local/libexec/boost/<version>/lib/
+# or /opt/local/lib/ (depending on the package)
 if(APPLE AND NOT DEFINED Boost_ROOT)
     # Try to find MacPorts Boost installation
-    if(EXISTS "/opt/local/lib/libboost_program_options.dylib" OR EXISTS "/opt/local/lib/libboost_program_options-mt.dylib")
+    # Check for newer MacPorts layout (libexec/boost/version/lib/)
+    if(EXISTS "/opt/local/libexec/boost/1.81/lib/libboost_program_options-mt.dylib")
+        set(Boost_ROOT "/opt/local/libexec/boost/1.81")
+        message(STATUS "Detected MacPorts Boost 1.81 installation at ${Boost_ROOT}")
+    elseif(EXISTS "/opt/local/libexec/boost/1.87/lib/libboost_program_options-mt.dylib")
+        set(Boost_ROOT "/opt/local/libexec/boost/1.87")
+        message(STATUS "Detected MacPorts Boost 1.87 installation at ${Boost_ROOT}")
+    elseif(EXISTS "/opt/local/libexec/boost/1.90/lib/libboost_program_options-mt.dylib")
+        set(Boost_ROOT "/opt/local/libexec/boost/1.90")
+        message(STATUS "Detected MacPorts Boost 1.90 installation at ${Boost_ROOT}")
+    # Check for older MacPorts layout (directly in /opt/local/lib/)
+    elseif(EXISTS "/opt/local/lib/libboost_program_options.dylib" OR EXISTS "/opt/local/lib/libboost_program_options-mt.dylib")
         set(Boost_ROOT "/opt/local")
         message(STATUS "Detected MacPorts Boost installation at ${Boost_ROOT}")
     endif()
