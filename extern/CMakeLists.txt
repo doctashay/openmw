@@ -165,8 +165,9 @@ if(NOT OPENMW_USE_SYSTEM_OSG)
     )
     FetchContent_MakeAvailable(osg)
 
-    # Patch OSG for macOS 10.5 compatibility: SYS_thread_selfid is not available
+    # Patch OSG for macOS 10.5 compatibility
     if(OPENMW_MACOSX_10_5)
+        # Patch 1: PThread.cpp - SYS_thread_selfid is not available
         set(OSG_PTHREAD_FILE "${osg_SOURCE_DIR}/src/OpenThreads/pthreads/PThread.cpp")
         if(EXISTS "${OSG_PTHREAD_FILE}")
             file(READ "${OSG_PTHREAD_FILE}" OSG_PTHREAD_CONTENT)
@@ -180,6 +181,49 @@ if(NOT OPENMW_USE_SYSTEM_OSG)
             message(STATUS "Patched OSG PThread.cpp for macOS 10.5 compatibility (SYS_thread_selfid -> pthread_self)")
         else()
             message(WARNING "OSG PThread.cpp not found at ${OSG_PTHREAD_FILE} - patch may not be applied")
+        endif()
+
+        # Patch 2: GraphicsWindowCocoa.mm - NSApplicationDelegate and setWantsBestResolutionOpenGLSurface
+        set(OSG_COCOA_FILE "${osg_SOURCE_DIR}/src/osgViewer/GraphicsWindowCocoa.mm")
+        if(EXISTS "${OSG_COCOA_FILE}")
+            file(READ "${OSG_COCOA_FILE}" OSG_COCOA_CONTENT)
+            # NSApplicationDelegate protocol was introduced in macOS 10.6, remove it for 10.5
+            string(REPLACE 
+                "@interface CocoaAppDelegate: NSObject <NSApplicationDelegate>"
+                "@interface CocoaAppDelegate: NSObject"
+                OSG_COCOA_CONTENT "${OSG_COCOA_CONTENT}")
+            # setWantsBestResolutionOpenGLSurface was introduced in macOS 10.7, comment it out for 10.5
+            string(REPLACE 
+                "[_view setWantsBestResolutionOpenGLSurface: NO];"
+                "// [_view setWantsBestResolutionOpenGLSurface: NO]; // Not available on macOS 10.5"
+                OSG_COCOA_CONTENT "${OSG_COCOA_CONTENT}")
+            file(WRITE "${OSG_COCOA_FILE}" "${OSG_COCOA_CONTENT}")
+            message(STATUS "Patched OSG GraphicsWindowCocoa.mm for macOS 10.5 compatibility")
+        else()
+            message(WARNING "OSG GraphicsWindowCocoa.mm not found at ${OSG_COCOA_FILE} - patch may not be applied")
+        endif()
+
+        # Patch 3: DarwinUtils.mm - CGDisplayMode APIs were introduced in macOS 10.6
+        # These APIs are not available on macOS 10.5, so we stub out the function
+        set(OSG_DARWIN_FILE "${osg_SOURCE_DIR}/src/osgViewer/DarwinUtils.mm")
+        if(EXISTS "${OSG_DARWIN_FILE}")
+            file(READ "${OSG_DARWIN_FILE}" OSG_DARWIN_CONTENT)
+            # Add early return at the start of findBestDisplayModeFor for macOS 10.5
+            # Replace in order of appearance in the file
+            # First, handle the first API call (line 165)
+            string(REPLACE 
+                "CFArrayRef availableModes = CGDisplayCopyAllDisplayModes (displayid, NULL);"
+                "#if MAC_OS_X_VERSION_MIN_REQUIRED >= 1060\n        CFArrayRef availableModes = CGDisplayCopyAllDisplayModes (displayid, NULL);\n#else\n        // CGDisplayMode APIs not available on macOS 10.5 - return early\n        return false;\n#endif"
+                OSG_DARWIN_CONTENT "${OSG_DARWIN_CONTENT}")
+            # Then handle the CGDisplayModeRef type declaration (line 168)
+            string(REPLACE 
+                "CGDisplayModeRef best_match(NULL);"
+                "#if MAC_OS_X_VERSION_MIN_REQUIRED >= 1060\n        CGDisplayModeRef best_match(NULL);\n#else\n        // Already returned above for 10.5\n#endif"
+                OSG_DARWIN_CONTENT "${OSG_DARWIN_CONTENT}")
+            file(WRITE "${OSG_DARWIN_FILE}" "${OSG_DARWIN_CONTENT}")
+            message(STATUS "Patched OSG DarwinUtils.mm for macOS 10.5 compatibility (CGDisplayMode APIs - early return)")
+        else()
+            message(WARNING "OSG DarwinUtils.mm not found at ${OSG_DARWIN_FILE} - patch may not be applied")
         endif()
     endif()
 
