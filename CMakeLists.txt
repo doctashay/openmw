@@ -49,19 +49,15 @@ option(PRECOMPILE_HEADERS_WITH_MSVC "Precompile most common used headers with MS
 
 set(OpenGL_GL_PREFERENCE LEGACY)  # Use LEGACY as we use GL2; GLNVD is for GL3 and up.
 
-# USE_QT - auto-detect based on build targets, but allow user override
+# USE_QT - disabled by default, user can enable if needed
 # First check if user explicitly provided USE_QT on command line
 if (DEFINED USE_QT)
     # User explicitly set USE_QT, respect their choice
     message(STATUS "USE_QT explicitly set to: ${USE_QT}")
 else()
-    # Auto-detect: Qt is needed if building any Qt-dependent applications
-    if (BUILD_LAUNCHER OR BUILD_OPENCS OR BUILD_WIZARD OR BUILD_OPENCS_TESTS)
-        set(USE_QT TRUE)
-    else()
-        set(USE_QT FALSE)
-    endif()
-    message(STATUS "USE_QT auto-detected: ${USE_QT}")
+    # Default to FALSE - Qt disabled
+    set(USE_QT FALSE)
+    message(STATUS "USE_QT disabled by default (set USE_QT=ON to enable)")
 endif()
 
 # If the user doesn't supply a CMAKE_BUILD_TYPE via command line, choose one for them.
