@@ -40,6 +40,7 @@ cmake \
     -D USE_QT=FALSE \
     -D BUILD_BSATOOL=ON \
     -D BUILD_ESMTOOL=ON \
+    -D OPENMW_USE_SYSTEM_YAML_CPP=OFF \
     .. 2>&1 | tee cmake_test.log
 
 if [ ${PIPESTATUS[0]} -eq 0 ]; then
