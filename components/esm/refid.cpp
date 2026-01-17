@@ -12,12 +12,16 @@ namespace ESM
 {
     namespace
     {
-        // Use inline for unity build compatibility (C++17+)
-        inline const std::string emptyString;
+        // Use function to avoid unity build redefinition issues
+        const std::string& getEmptyString()
+        {
+            static const std::string emptyString;
+            return emptyString;
+        }
 
         struct GetRefString
         {
-            const std::string& operator()(EmptyRefId /*v*/) const { return emptyString; }
+            const std::string& operator()(EmptyRefId /*v*/) const { return getEmptyString(); }
 
             const std::string& operator()(StringRefId v) const { return v.getValue(); }
 
