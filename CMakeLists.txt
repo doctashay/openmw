@@ -625,6 +625,10 @@ endif(HAVE_MULTIVIEW)
 
 set(BOOST_COMPONENTS iostreams program_options)
 
+# Explicitly use shared libraries (MacPorts boost176 is built with +no_static)
+set(Boost_USE_STATIC_LIBS OFF)
+set(Boost_USE_STATIC_RUNTIME OFF)
+
 # Try CONFIG mode first (modern Boost), fallback to MODULE mode (older installations/MacPorts)
 find_package(Boost 1.70.0 CONFIG QUIET COMPONENTS ${BOOST_COMPONENTS} OPTIONAL_COMPONENTS ${BOOST_OPTIONAL_COMPONENTS})
 if(NOT Boost_FOUND)
