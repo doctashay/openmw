@@ -866,10 +866,10 @@ if(APPLE AND (CMAKE_OSX_ARCHITECTURES MATCHES "ppc" OR OPENMW_POWERPC_BUILD))
                     )
                     add_definitions(-D_GLIBCXX_USE_CXX11_ABI=1)
                     set(WORKAROUND_APPLIED TRUE)
-                else
+                else()
                     message(STATUS "Boost and OpenMW both use libstdc++ with compatible C++11 ABI settings")
                 endif()
-            else
+            else()
                 message(STATUS "Boost and OpenMW both use libstdc++ - ABI should be compatible")
             endif()
         # Case 3: Both use libc++ - should be compatible
