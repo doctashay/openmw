@@ -55,7 +55,7 @@ done
 BUILD_DIR="${BUILD_DIR:-build}"
 DEPLOYMENT_TARGET="10.5"
 ARCHITECTURE="${ARCHITECTURE:-ppc}"  # or "ppc64" for 64-bit PowerPC
-SDK_PATH="/Developer/SDKs/MacOSX10.5sdk"
+SDK_PATH="/Developer/SDKs/MacOSX10.5.sdk"
 
 # Verify SDK exists
 if [ ! -d "$SDK_PATH" ]; then

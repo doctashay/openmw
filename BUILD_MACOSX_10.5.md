@@ -15,7 +15,7 @@ This document describes how to build OpenMW for macOS 10.5 Leopard on PowerPC ar
 
 The macOS 10.5 SDK should be located at:
 ```
-/Developer/SDKs/MacOSX10.5sdk
+/Developer/SDKs/MacOSX10.5.sdk
 ```
 
 If your SDK is in a different location, set the `MACOSX_SDK_PATH` environment variable:
@@ -52,7 +52,7 @@ cmake \
     -D CMAKE_BUILD_TYPE=RelWithDebInfo \
     -D CMAKE_OSX_DEPLOYMENT_TARGET=10.5 \
     -D CMAKE_OSX_ARCHITECTURES=ppc \
-    -D CMAKE_OSX_SYSROOT="/Developer/SDKs/MacOSX10.5sdk" \
+    -D CMAKE_OSX_SYSROOT="/Developer/SDKs/MacOSX10.5.sdk" \
     -D OPENMW_MACOSX_10_5_BUILD=ON \
     -D OPENMW_POWERPC_BUILD=ON \
     -D CMAKE_C_COMPILER="gcc-mp-14" \
@@ -145,7 +145,7 @@ For macOS 10.5, Qt4 is automatically selected. If you want to explicitly control
 ### CMake Can't Find SDK
 
 ```bash
-export MACOSX_SDK_PATH="/Developer/SDKs/MacOSX10.5sdk"
+export MACOSX_SDK_PATH="/Developer/SDKs/MacOSX10.5.sdk"
 # or
 export MACOSX_SDK_PATH="/opt/local/libexec/SDKs/MacOSX10.5.sdk"
 ```

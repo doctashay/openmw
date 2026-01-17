@@ -5,7 +5,7 @@
 set -e
 
 BUILD_DIR="build_test"
-SDK_PATH="/Developer/SDKs/MacOSX10.5sdk"
+SDK_PATH="/Developer/SDKs/MacOSX10.5.sdk"
 
 echo "=== Testing macOS 10.5 PowerPC Build Configuration ==="
 echo ""

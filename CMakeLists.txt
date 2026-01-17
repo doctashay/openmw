@@ -112,8 +112,8 @@ if (APPLE)
         # SDK path configuration
         if(DEFINED ENV{MACOSX_SDK_PATH})
             set(CMAKE_OSX_SYSROOT "$ENV{MACOSX_SDK_PATH}" CACHE PATH "macOS SDK path")
-        elseif(EXISTS "/Developer/SDKs/MacOSX10.5sdk")
-            set(CMAKE_OSX_SYSROOT "/Developer/SDKs/MacOSX10.5sdk" CACHE PATH "macOS SDK path")
+        elseif(EXISTS "/Developer/SDKs/MacOSX10.5.sdk")
+            set(CMAKE_OSX_SYSROOT "/Developer/SDKs/MacOSX10.5.sdk" CACHE PATH "macOS SDK path")
         elseif(EXISTS "/Developer/SDKs/MacOSX10.5.sdk")
             set(CMAKE_OSX_SYSROOT "/Developer/SDKs/MacOSX10.5.sdk" CACHE PATH "macOS SDK path")
         elseif(EXISTS "/opt/local/libexec/SDKs/MacOSX10.5.sdk")
@@ -345,7 +345,6 @@ if (USE_QT)
     endif()
 else()
     set(USE_QT4 FALSE CACHE BOOL "Using Qt4" FORCE)
-endif()
 endif()
 
 set(USED_OSG_COMPONENTS
