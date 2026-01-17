@@ -25,6 +25,7 @@ echo "Running CMake configuration test..."
 echo ""
 
 # Minimal CMake configuration - just game engine, no Qt
+# Unity builds enabled for faster compilation, but all Qt-dependent targets disabled
 cmake \
     -D CMAKE_BUILD_TYPE=Debug \
     -D CMAKE_OSX_DEPLOYMENT_TARGET=10.5 \
@@ -34,10 +35,13 @@ cmake \
     -D OPENMW_POWERPC_BUILD=ON \
     -D CMAKE_C_COMPILER="gcc-mp-14" \
     -D CMAKE_CXX_COMPILER="g++-mp-14" \
+    -D OPENMW_UNITY_BUILD=ON \
     -D BUILD_LAUNCHER=OFF \
     -D BUILD_OPENCS=OFF \
     -D BUILD_WIZARD=OFF \
+    -D BUILD_OPENCS_TESTS=OFF \
     -D USE_QT=FALSE \
+    -D BUILD_OPENMW=ON \
     -D BUILD_BSATOOL=ON \
     -D BUILD_ESMTOOL=ON \
     -D OPENMW_USE_SYSTEM_YAML_CPP=OFF \

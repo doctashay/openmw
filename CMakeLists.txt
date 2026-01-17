@@ -49,10 +49,19 @@ option(PRECOMPILE_HEADERS_WITH_MSVC "Precompile most common used headers with MS
 
 set(OpenGL_GL_PREFERENCE LEGACY)  # Use LEGACY as we use GL2; GLNVD is for GL3 and up.
 
-if (BUILD_LAUNCHER OR BUILD_OPENCS OR BUILD_WIZARD OR BUILD_OPENCS_TESTS)
-    set(USE_QT TRUE)
+# USE_QT - auto-detect based on build targets, but allow user override
+# First check if user explicitly provided USE_QT on command line
+if (DEFINED USE_QT)
+    # User explicitly set USE_QT, respect their choice
+    message(STATUS "USE_QT explicitly set to: ${USE_QT}")
 else()
-    set(USE_QT FALSE)
+    # Auto-detect: Qt is needed if building any Qt-dependent applications
+    if (BUILD_LAUNCHER OR BUILD_OPENCS OR BUILD_WIZARD OR BUILD_OPENCS_TESTS)
+        set(USE_QT TRUE)
+    else()
+        set(USE_QT FALSE)
+    endif()
+    message(STATUS "USE_QT auto-detected: ${USE_QT}")
 endif()
 
 # If the user doesn't supply a CMAKE_BUILD_TYPE via command line, choose one for them.
@@ -327,12 +336,22 @@ endif()
 
 if (USE_QT)
     # Qt version selection for macOS 10.5
-    option(OPENMW_QT_VERSION "Qt version to use (4 or 6)" 6)
+    # Default to Qt4 for macOS 10.5, Qt6 otherwise
+    if(OPENMW_MACOSX_10_5)
+        set(OPENMW_QT_VERSION_DEFAULT 4)
+        message(STATUS "macOS 10.5 detected: defaulting to Qt4")
+    else()
+        set(OPENMW_QT_VERSION_DEFAULT 6)
+    endif()
+    option(OPENMW_QT_VERSION "Qt version to use (4 or 6)" ${OPENMW_QT_VERSION_DEFAULT})
     
     if(OPENMW_MACOSX_10_5)
-        # macOS 10.5 requires Qt4
-        set(OPENMW_QT_VERSION 4 CACHE STRING "Qt version" FORCE)
-        message(STATUS "macOS 10.5 detected: forcing Qt4")
+        # macOS 10.5 requires Qt4 - force it even if user tries to override
+        if(NOT OPENMW_QT_VERSION EQUAL 4)
+            message(WARNING "macOS 10.5 only supports Qt4, forcing Qt4 (ignoring Qt version ${OPENMW_QT_VERSION})")
+            set(OPENMW_QT_VERSION 4 CACHE STRING "Qt version" FORCE)
+        endif()
+        message(STATUS "macOS 10.5 build: using Qt4")
     endif()
     
     if(OPENMW_QT_VERSION EQUAL 4)
