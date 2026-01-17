@@ -11,6 +11,7 @@
 #include <components/esm/fourcc.hpp>
 #include <components/files/constrainedfilestream.hpp>
 #include <components/files/utils.hpp>
+#include <components/misc/endianness.hpp>
 #include <components/vfs/pathutil.hpp>
 
 #include "ba2file.hpp"
@@ -32,6 +33,13 @@ namespace Bsa
             in.read(reinterpret_cast<char*>(&nameHash), sizeof(uint32_t));
             in.read(reinterpret_cast<char*>(&extHash), sizeof(uint32_t));
             in.read(reinterpret_cast<char*>(&dirHash), sizeof(uint32_t));
+            // BA2 files are little-endian, convert on big-endian systems
+            if constexpr (Misc::IS_BIG_ENDIAN)
+            {
+                nameHash = Misc::fromLittleEndian(nameHash);
+                extHash = Misc::fromLittleEndian(extHash);
+                dirHash = Misc::fromLittleEndian(dirHash);
+            }
 
             FileRecord file;
             uint8_t unknown;
@@ -44,6 +52,9 @@ namespace Bsa
 
             uint16_t chunkHeaderSize;
             in.read(reinterpret_cast<char*>(&chunkHeaderSize), sizeof(uint16_t));
+            // BA2 files are little-endian, convert on big-endian systems
+            if constexpr (Misc::IS_BIG_ENDIAN)
+                chunkHeaderSize = Misc::fromLittleEndian(chunkHeaderSize);
             if (chunkHeaderSize != 24)
                 fail("Corrupted BSA");
 
@@ -52,6 +63,13 @@ namespace Bsa
             in.read(reinterpret_cast<char*>(&file.numMips), sizeof(uint8_t));
             in.read(reinterpret_cast<char*>(&file.DXGIFormat), sizeof(uint8_t));
             in.read(reinterpret_cast<char*>(&file.cubeMaps), sizeof(uint16_t));
+            // BA2 files are little-endian, convert on big-endian systems
+            if constexpr (Misc::IS_BIG_ENDIAN)
+            {
+                file.height = Misc::fromLittleEndian(file.height);
+                file.width = Misc::fromLittleEndian(file.width);
+                file.cubeMaps = Misc::fromLittleEndian(file.cubeMaps);
+            }
             for (auto& texture : file.texturesChunks)
             {
                 in.read(reinterpret_cast<char*>(&texture.offset), sizeof(int64_t));
@@ -61,6 +79,16 @@ namespace Bsa
                 in.read(reinterpret_cast<char*>(&texture.endMip), sizeof(uint16_t));
                 uint32_t baadfood;
                 in.read(reinterpret_cast<char*>(&baadfood), sizeof(uint32_t));
+                // BA2 files are little-endian, convert on big-endian systems
+                if constexpr (Misc::IS_BIG_ENDIAN)
+                {
+                    texture.offset = Misc::fromLittleEndian(texture.offset);
+                    texture.packedSize = Misc::fromLittleEndian(texture.packedSize);
+                    texture.size = Misc::fromLittleEndian(texture.size);
+                    texture.startMip = Misc::fromLittleEndian(texture.startMip);
+                    texture.endMip = Misc::fromLittleEndian(texture.endMip);
+                    baadfood = Misc::fromLittleEndian(baadfood);
+                }
                 if (baadfood != 0xBAADF00D)
                     fail("Corrupted BSA");
             }
@@ -90,6 +118,16 @@ namespace Bsa
             input.read(reinterpret_cast<char*>(header), 16);
             input.read(reinterpret_cast<char*>(&fileTableOffset), 8);
 
+            // BA2 files are little-endian, convert on big-endian systems
+            if constexpr (Misc::IS_BIG_ENDIAN)
+            {
+                header[0] = Misc::fromLittleEndian(header[0]);
+                header[1] = Misc::fromLittleEndian(header[1]);
+                header[2] = Misc::fromLittleEndian(header[2]);
+                header[3] = Misc::fromLittleEndian(header[3]);
+                fileTableOffset = Misc::fromLittleEndian(fileTableOffset);
+            }
+
             if (header[0] != ESM::fourCC("BTDX"))
                 fail("Unrecognized BA2 signature");
             mVersion = header[1];
@@ -104,6 +142,12 @@ namespace Bsa
                     input.read(reinterpret_cast<char*>(&dummy), 8);
                     uint32_t compressionMethod;
                     input.read(reinterpret_cast<char*>(&compressionMethod), 4);
+                    // BA2 files are little-endian, convert on big-endian systems
+                    if constexpr (Misc::IS_BIG_ENDIAN)
+                    {
+                        dummy = Misc::fromLittleEndian(dummy);
+                        compressionMethod = Misc::fromLittleEndian(compressionMethod);
+                    }
                     if (compressionMethod == 3)
                         fail("Unsupported LZ4-compressed DDS BA2");
                     break;
@@ -127,6 +171,9 @@ namespace Bsa
             std::vector<char> fileName;
             uint16_t fileNameSize;
             input.read(reinterpret_cast<char*>(&fileNameSize), sizeof(uint16_t));
+            // BA2 files are little-endian, convert on big-endian systems
+            if constexpr (Misc::IS_BIG_ENDIAN)
+                fileNameSize = Misc::fromLittleEndian(fileNameSize);
             fileName.resize(fileNameSize + 1);
             input.read(fileName.data(), fileNameSize);
             mFileNames.push_back(std::move(fileName));

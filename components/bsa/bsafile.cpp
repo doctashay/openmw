@@ -36,6 +36,7 @@
 #include <components/esm/fourcc.hpp>
 #include <components/files/constrainedfilestream.hpp>
 #include <components/files/utils.hpp>
+#include <components/misc/endianness.hpp>
 
 using namespace Bsa;
 
@@ -126,6 +127,14 @@ void BSAFile::readHeader(std::istream& input)
         if (input.fail())
             fail(std::format("Failed to read head: {}", std::generic_category().message(errno)));
 
+        // BSA files are little-endian, convert on big-endian systems
+        if constexpr (Misc::IS_BIG_ENDIAN)
+        {
+            head[0] = Misc::fromLittleEndian(head[0]);
+            head[1] = Misc::fromLittleEndian(head[1]);
+            head[2] = Misc::fromLittleEndian(head[2]);
+        }
+
         if (head[0] != 0x100)
             fail("Unrecognized BSA header");
 
@@ -150,6 +159,13 @@ void BSAFile::readHeader(std::istream& input)
     if (input.fail())
         fail(std::format("Failed to read offsets: {}", std::generic_category().message(errno)));
 
+    // BSA files are little-endian, convert on big-endian systems
+    if constexpr (Misc::IS_BIG_ENDIAN)
+    {
+        for (auto& offset : offsets)
+            offset = Misc::fromLittleEndian(offset);
+    }
+
     // Read the string table
     mStringBuf.resize(dirsize - 12 * filenum);
     input.read(mStringBuf.data(), mStringBuf.size());
@@ -165,6 +181,16 @@ void BSAFile::readHeader(std::istream& input)
 
     if (input.fail())
         fail(std::format("Failed to read hashes: {}", std::generic_category().message(errno)));
+
+    // Hash values are little-endian, convert on big-endian systems
+    if constexpr (Misc::IS_BIG_ENDIAN)
+    {
+        for (auto& hash : hashes)
+        {
+            hash.mLow = Misc::fromLittleEndian(hash.mLow);
+            hash.mHigh = Misc::fromLittleEndian(hash.mHigh);
+        }
+    }
 
     // Calculate the offset of the data buffer. All file offsets are
     // relative to this. 12 header bytes + directory + hash table
@@ -365,6 +391,14 @@ BsaVersion Bsa::BSAFile::detectVersion(const std::filesystem::path& filePath)
 
     if (input.gcount() != sizeof(head))
         return BsaVersion::Unknown;
+
+    // BSA files are little-endian, convert on big-endian systems
+    if constexpr (Misc::IS_BIG_ENDIAN)
+    {
+        head[0] = Misc::fromLittleEndian(head[0]);
+        head[1] = Misc::fromLittleEndian(head[1]);
+        head[2] = Misc::fromLittleEndian(head[2]);
+    }
 
     if (head[0] == static_cast<uint32_t>(BsaVersion::Uncompressed))
     {

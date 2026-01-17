@@ -15,6 +15,7 @@
 #include "components/esm/decompose.hpp"
 #include "components/esm/esmcommon.hpp"
 #include "components/esm/refid.hpp"
+#include "components/misc/endianness.hpp"
 
 #include "loadtes3.hpp"
 
@@ -315,6 +316,9 @@ namespace ESM
         void getT(X& x)
         {
             getExact(&x, sizeof(X));
+            // ESM files are little-endian, convert arithmetic types on big-endian systems
+            if constexpr (std::is_arithmetic_v<X> && Misc::IS_BIG_ENDIAN)
+                x = Misc::fromLittleEndian(x);
         }
 
         template <typename T, typename = std::enable_if_t<IsReadable<T>>>
