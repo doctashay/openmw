@@ -12,7 +12,7 @@ namespace ESM
 {
     namespace
     {
-        const std::string emptyString;
+        static const std::string emptyString;
 
         struct GetRefString
         {

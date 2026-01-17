@@ -787,25 +787,35 @@ if(OPENMW_LTO_BUILD)
 endif()
 
 if (APPLE)
-    if(OPENMW_MACOSX_10_5)
-        # macOS 10.5: libc++ was introduced in 10.7, but GCC 14 might require it
-        # Try to detect if libc++ is available, otherwise fall back to libstdc++
-        include(CheckCXXCompilerFlag)
-        check_cxx_compiler_flag("-stdlib=libc++" HAS_LIBCXX)
-        
-        if(HAS_LIBCXX)
-            message(STATUS "Using libc++ for macOS 10.5 (GCC 14 compatibility)")
+    # -stdlib flag is Clang-specific, not supported by GCC
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang")
+        if(OPENMW_MACOSX_10_5)
+            # macOS 10.5: libc++ was introduced in 10.7, but Clang might require it
+            # Try to detect if libc++ is available, otherwise fall back to libstdc++
+            include(CheckCXXCompilerFlag)
+            check_cxx_compiler_flag("-stdlib=libc++" HAS_LIBCXX)
+            
+            if(HAS_LIBCXX)
+                message(STATUS "Using libc++ for macOS 10.5 (Clang compatibility)")
+                set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
+                set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
+            else()
+                message(STATUS "libc++ not available, using libstdc++ for macOS 10.5")
+                set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libstdc++")
+                set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libstdc++")
+            endif()
+        else()
+            # Modern macOS: use libc++ with Clang
             set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
             set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
-        else()
-            message(STATUS "libc++ not available, using libstdc++ for macOS 10.5")
-            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libstdc++")
-            set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libstdc++")
         endif()
     else()
-        # Modern macOS: use libc++
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
-        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
+        # GCC: uses libstdc++ by default, no -stdlib flag needed
+        if(OPENMW_MACOSX_10_5)
+            message(STATUS "Using GCC - libstdc++ is default (no -stdlib flag needed)")
+        else()
+            message(STATUS "Using GCC - libstdc++ is default (no -stdlib flag needed)")
+        endif()
     endif()
 endif()
 

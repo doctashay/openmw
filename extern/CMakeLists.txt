@@ -187,17 +187,60 @@ if(NOT OPENMW_USE_SYSTEM_OSG)
         set(OSG_COCOA_FILE "${osg_SOURCE_DIR}/src/osgViewer/GraphicsWindowCocoa.mm")
         if(EXISTS "${OSG_COCOA_FILE}")
             file(READ "${OSG_COCOA_FILE}" OSG_COCOA_CONTENT)
-            # NSApplicationDelegate protocol was introduced in macOS 10.6, remove it for 10.5
-            string(REPLACE 
-                "@interface CocoaAppDelegate: NSObject <NSApplicationDelegate>"
-                "@interface CocoaAppDelegate: NSObject"
-                OSG_COCOA_CONTENT "${OSG_COCOA_CONTENT}")
+            
+            # Check if patch is needed
+            string(FIND "${OSG_COCOA_CONTENT}" "NSApplicationDelegate" FOUND_NSAPPLICATIONDELEGATE)
+            if(NOT FOUND_NSAPPLICATIONDELEGATE EQUAL -1)
+                # NSApplicationDelegate protocol was introduced in macOS 10.6, remove it for 10.5
+                # Use regex to match any whitespace variations
+                string(REGEX REPLACE
+                    "<[ ]*NSApplicationDelegate[ ]*>"
+                    ""
+                    OSG_COCOA_CONTENT "${OSG_COCOA_CONTENT}")
+                # Also try direct string replacements for common patterns
+                string(REPLACE 
+                    "<NSApplicationDelegate>"
+                    ""
+                    OSG_COCOA_CONTENT "${OSG_COCOA_CONTENT}")
+                string(REPLACE 
+                    " <NSApplicationDelegate>"
+                    ""
+                    OSG_COCOA_CONTENT "${OSG_COCOA_CONTENT}")
+                string(REPLACE 
+                    "< NSApplicationDelegate >"
+                    ""
+                    OSG_COCOA_CONTENT "${OSG_COCOA_CONTENT}")
+                message(STATUS "Removed NSApplicationDelegate protocol from GraphicsWindowCocoa.mm")
+            else()
+                message(STATUS "NSApplicationDelegate not found in GraphicsWindowCocoa.mm (may already be patched)")
+            endif()
+            
             # setWantsBestResolutionOpenGLSurface was introduced in macOS 10.7, comment it out for 10.5
-            string(REPLACE 
-                "[_view setWantsBestResolutionOpenGLSurface: NO];"
-                "// [_view setWantsBestResolutionOpenGLSurface: NO]; // Not available on macOS 10.5"
-                OSG_COCOA_CONTENT "${OSG_COCOA_CONTENT}")
+            string(FIND "${OSG_COCOA_CONTENT}" "setWantsBestResolutionOpenGLSurface" FOUND_SETWANTS)
+            if(NOT FOUND_SETWANTS EQUAL -1)
+                string(REPLACE 
+                    "[_view setWantsBestResolutionOpenGLSurface: NO];"
+                    "// [_view setWantsBestResolutionOpenGLSurface: NO]; // Not available on macOS 10.5"
+                    OSG_COCOA_CONTENT "${OSG_COCOA_CONTENT}")
+                string(REPLACE 
+                    "[_view setWantsBestResolutionOpenGLSurface:NO];"
+                    "// [_view setWantsBestResolutionOpenGLSurface:NO]; // Not available on macOS 10.5"
+                    OSG_COCOA_CONTENT "${OSG_COCOA_CONTENT}")
+                message(STATUS "Commented out setWantsBestResolutionOpenGLSurface in GraphicsWindowCocoa.mm")
+            endif()
+            
             file(WRITE "${OSG_COCOA_FILE}" "${OSG_COCOA_CONTENT}")
+            
+            # Verify patch was applied
+            file(READ "${OSG_COCOA_FILE}" OSG_COCOA_VERIFY)
+            string(FIND "${OSG_COCOA_VERIFY}" "NSApplicationDelegate" VERIFY_FOUND)
+            if(NOT VERIFY_FOUND EQUAL -1)
+                message(WARNING "WARNING: NSApplicationDelegate still found in GraphicsWindowCocoa.mm after patching!")
+                message(WARNING "Patch may have failed. File location: ${OSG_COCOA_FILE}")
+            else()
+                message(STATUS "Verified: NSApplicationDelegate successfully removed from GraphicsWindowCocoa.mm")
+            endif()
+            
             message(STATUS "Patched OSG GraphicsWindowCocoa.mm for macOS 10.5 compatibility")
         else()
             message(WARNING "OSG GraphicsWindowCocoa.mm not found at ${OSG_COCOA_FILE} - patch may not be applied")
