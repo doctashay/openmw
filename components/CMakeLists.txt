@@ -625,7 +625,12 @@ target_link_libraries(components ${BULLET_LIBRARIES})
 
 if (USE_QT)
     add_library(components_qt STATIC ${COMPONENT_QT_FILES})
-    target_link_libraries(components_qt components Qt::Widgets Qt::Core)
+    if(USE_QT4)
+        target_link_libraries(components_qt components ${QT_QTCORE_LIBRARY} ${QT_QTGUI_LIBRARY})
+        target_include_directories(components_qt PUBLIC ${QT_INCLUDE_DIR})
+    else()
+        target_link_libraries(components_qt components Qt::Widgets Qt::Core)
+    endif()
 
     if (BUILD_LAUNCHER OR BUILD_WIZARD)
         add_dependencies(components_qt qm-files)

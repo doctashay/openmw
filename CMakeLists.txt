@@ -68,6 +68,80 @@ if (APPLE)
     set(APP_BUNDLE_NAME "${CMAKE_PROJECT_NAME}.app")
 
     set(APP_BUNDLE_DIR "${OpenMW_BINARY_DIR}/${APP_BUNDLE_NAME}")
+    
+    # macOS 10.5 Leopard and PowerPC support
+    option(OPENMW_MACOSX_10_5_BUILD "Build for macOS 10.5 Leopard" OFF)
+    option(OPENMW_POWERPC_BUILD "Build for PowerPC architecture" OFF)
+    
+    # Auto-detect if deployment target is 10.5 or earlier
+    if(CMAKE_OSX_DEPLOYMENT_TARGET)
+        if(CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS "10.6")
+            set(OPENMW_MACOSX_10_5 TRUE)
+            message(STATUS "Detected macOS 10.5 build (deployment target: ${CMAKE_OSX_DEPLOYMENT_TARGET})")
+        endif()
+    endif()
+    
+    # Check for PowerPC architecture
+    if(CMAKE_OSX_ARCHITECTURES)
+        string(TOUPPER "${CMAKE_OSX_ARCHITECTURES}" ARCH_UPPER)
+        if(ARCH_UPPER MATCHES "PPC|POWERPC")
+            set(OPENMW_POWERPC_BUILD TRUE)
+            message(STATUS "Detected PowerPC architecture: ${CMAKE_OSX_ARCHITECTURES}")
+        endif()
+    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "powerpc|ppc")
+        set(OPENMW_POWERPC_BUILD TRUE)
+        message(STATUS "Detected PowerPC architecture from system processor")
+    endif()
+    
+    # Explicit override options
+    if(OPENMW_MACOSX_10_5_BUILD)
+        set(OPENMW_MACOSX_10_5 TRUE)
+    endif()
+    
+    if(OPENMW_MACOSX_10_5)
+        message(STATUS "Configuring for macOS 10.5 Leopard")
+        
+        # Force deployment target to 10.5
+        if(NOT CMAKE_OSX_DEPLOYMENT_TARGET)
+            set(CMAKE_OSX_DEPLOYMENT_TARGET "10.5" CACHE STRING "macOS deployment target" FORCE)
+        elseif(CMAKE_OSX_DEPLOYMENT_TARGET VERSION_GREATER "10.5")
+            message(WARNING "Deployment target ${CMAKE_OSX_DEPLOYMENT_TARGET} is newer than 10.5, forcing to 10.5")
+            set(CMAKE_OSX_DEPLOYMENT_TARGET "10.5" CACHE STRING "macOS deployment target" FORCE)
+        endif()
+        
+        # SDK path configuration
+        if(DEFINED ENV{MACOSX_SDK_PATH})
+            set(CMAKE_OSX_SYSROOT "$ENV{MACOSX_SDK_PATH}" CACHE PATH "macOS SDK path")
+        elseif(EXISTS "/Developer/SDKs/MacOSX10.5sdk")
+            set(CMAKE_OSX_SYSROOT "/Developer/SDKs/MacOSX10.5sdk" CACHE PATH "macOS SDK path")
+        elseif(EXISTS "/Developer/SDKs/MacOSX10.5.sdk")
+            set(CMAKE_OSX_SYSROOT "/Developer/SDKs/MacOSX10.5.sdk" CACHE PATH "macOS SDK path")
+        elseif(EXISTS "/opt/local/libexec/SDKs/MacOSX10.5.sdk")
+            set(CMAKE_OSX_SYSROOT "/opt/local/libexec/SDKs/MacOSX10.5.sdk" CACHE PATH "macOS SDK path")
+        else()
+            message(WARNING "macOS 10.5 SDK not found. Please set MACOSX_SDK_PATH environment variable")
+        endif()
+        
+        if(CMAKE_OSX_SYSROOT)
+            message(STATUS "Using macOS SDK: ${CMAKE_OSX_SYSROOT}")
+        endif()
+        
+        # Compiler flags for 10.5
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mmacosx-version-min=10.5")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mmacosx-version-min=10.5")
+        
+        # Define macros for 10.5 API availability
+        add_definitions(-DMAC_OS_X_VERSION_MIN_REQUIRED=1050)
+        add_definitions(-DMAC_OS_X_VERSION_MAX_ALLOWED=1050)
+    endif()
+    
+    if(OPENMW_POWERPC_BUILD)
+        message(STATUS "Building for PowerPC architecture")
+        if(NOT CMAKE_OSX_ARCHITECTURES)
+            # Default to 32-bit PowerPC for 10.5
+            set(CMAKE_OSX_ARCHITECTURES "ppc" CACHE STRING "macOS architectures" FORCE)
+        endif()
+    endif()
 endif (APPLE)
 
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/)
@@ -249,9 +323,29 @@ endif()
 find_package(LZ4 REQUIRED)
 
 if (USE_QT)
-    find_package(QT REQUIRED COMPONENTS Core NAMES Qt6)
-    find_package(Qt6 COMPONENTS Core Widgets Network OpenGL OpenGLWidgets LinguistTools Svg REQUIRED)
-    message(STATUS "Using Qt${QT_VERSION}")
+    # Qt version selection for macOS 10.5
+    option(OPENMW_QT_VERSION "Qt version to use (4 or 6)" 6)
+    
+    if(OPENMW_MACOSX_10_5)
+        # macOS 10.5 requires Qt4
+        set(OPENMW_QT_VERSION 4 CACHE STRING "Qt version" FORCE)
+        message(STATUS "macOS 10.5 detected: forcing Qt4")
+    endif()
+    
+    if(OPENMW_QT_VERSION EQUAL 4)
+        find_package(Qt4 REQUIRED COMPONENTS QtCore QtGui QtOpenGL QtNetwork QtSvg)
+        set(QT_VERSION_MAJOR 4)
+        set(USE_QT4 TRUE CACHE BOOL "Using Qt4" FORCE)
+        message(STATUS "Using Qt4")
+    else()
+        find_package(QT REQUIRED COMPONENTS Core NAMES Qt6)
+        find_package(Qt6 COMPONENTS Core Widgets Network OpenGL OpenGLWidgets LinguistTools Svg REQUIRED)
+        set(USE_QT4 FALSE CACHE BOOL "Using Qt4" FORCE)
+        message(STATUS "Using Qt${QT_VERSION}")
+    endif()
+else()
+    set(USE_QT4 FALSE CACHE BOOL "Using Qt4" FORCE)
+endif()
 endif()
 
 set(USED_OSG_COMPONENTS
@@ -584,8 +678,26 @@ if(OPENMW_LTO_BUILD)
 endif()
 
 if (APPLE)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
+    if(OPENMW_MACOSX_10_5)
+        # macOS 10.5: libc++ was introduced in 10.7, but GCC 14 might require it
+        # Try to detect if libc++ is available, otherwise fall back to libstdc++
+        include(CheckCXXCompilerFlag)
+        check_cxx_compiler_flag("-stdlib=libc++" HAS_LIBCXX)
+        
+        if(HAS_LIBCXX)
+            message(STATUS "Using libc++ for macOS 10.5 (GCC 14 compatibility)")
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
+            set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
+        else()
+            message(STATUS "libc++ not available, using libstdc++ for macOS 10.5")
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libstdc++")
+            set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libstdc++")
+        endif()
+    else()
+        # Modern macOS: use libc++
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
+    endif()
 endif()
 
 # Extern
