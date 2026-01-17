@@ -142,6 +142,11 @@ if (APPLE)
         # Define macros for 10.5 API availability
         add_definitions(-DMAC_OS_X_VERSION_MIN_REQUIRED=1050)
         add_definitions(-DMAC_OS_X_VERSION_MAX_ALLOWED=1050)
+        # Also define the underscored version used by some code
+        add_definitions(-D__MAC_OS_X_VERSION_MIN_REQUIRED=1050)
+        add_definitions(-D__MAC_OS_X_VERSION_MAX_ALLOWED=1050)
+        # Define OPENMW_MACOSX_10_5 for code to use
+        add_definitions(-DOPENMW_MACOSX_10_5=1)
     endif()
     
     if(OPENMW_POWERPC_BUILD)
