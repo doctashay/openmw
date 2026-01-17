@@ -543,14 +543,27 @@ if(NOT HAVE_STDINT_H)
 endif()
 
 if(OPENMW_USE_SYSTEM_OSG)
-    find_package(OpenSceneGraph 3.6.5 REQUIRED ${USED_OSG_COMPONENTS})  # Bump to 3.6.6 when released
+    find_package(OpenSceneGraph 3.6.5 QUIET ${USED_OSG_COMPONENTS})  # Bump to 3.6.6 when released
 
-    if(OSG_STATIC)
-        find_package(OSGPlugins REQUIRED COMPONENTS ${USED_OSG_PLUGINS})
+    if(NOT OpenSceneGraph_FOUND)
+        message(STATUS "System OpenSceneGraph not found, will build internally")
+        set(OPENMW_USE_SYSTEM_OSG OFF)
+        set(_osg_static_default ON)
+    else()
+        if(OSG_STATIC)
+            find_package(OSGPlugins QUIET COMPONENTS ${USED_OSG_PLUGINS})
+            if(NOT OSGPlugins_FOUND)
+                message(STATUS "System OSGPlugins not found, will build OSG internally")
+                set(OPENMW_USE_SYSTEM_OSG OFF)
+                set(_osg_static_default ON)
+            endif()
+        endif()
     endif()
 endif()
 
-include_directories(BEFORE SYSTEM ${OPENSCENEGRAPH_INCLUDE_DIRS})
+if(OPENMW_USE_SYSTEM_OSG)
+    include_directories(BEFORE SYSTEM ${OPENSCENEGRAPH_INCLUDE_DIRS})
+endif()
 
 if(OSG_STATIC)
     add_definitions(-DOSG_LIBRARY_STATIC)
@@ -566,7 +579,12 @@ set(BOOST_COMPONENTS iostreams program_options)
 find_package(Boost 1.70.0 CONFIG REQUIRED COMPONENTS ${BOOST_COMPONENTS} OPTIONAL_COMPONENTS ${BOOST_OPTIONAL_COMPONENTS})
 
 if(OPENMW_USE_SYSTEM_MYGUI)
-    find_package(MyGUI 3.4.3 REQUIRED)
+    find_package(MyGUI 3.4.3 QUIET)
+    if(NOT MyGUI_FOUND)
+        message(STATUS "System MyGUI not found, will build internally")
+        set(OPENMW_USE_SYSTEM_MYGUI OFF)
+        set(_mygui_static_default ON)
+    endif()
 endif()
 find_package(SDL2 2.0.20 REQUIRED)
 find_package(OpenAL REQUIRED)
@@ -591,7 +609,6 @@ set(SOL_CONFIG_DIR ${OpenMW_SOURCE_DIR}/extern/sol_config)
 
 include_directories(
     BEFORE SYSTEM
-    ${MyGUI_INCLUDE_DIRS}
     ${OPENAL_INCLUDE_DIR}
     ${OPENGL_INCLUDE_DIR}
     ${BULLET_INCLUDE_DIRS}
@@ -600,6 +617,9 @@ include_directories(
     ${SOL_CONFIG_DIR}
     ${ICU_INCLUDE_DIRS}
 )
+if(OPENMW_USE_SYSTEM_MYGUI AND MyGUI_INCLUDE_DIRS)
+    include_directories(BEFORE SYSTEM ${MyGUI_INCLUDE_DIRS})
+endif()
 include_directories(".")
 
 link_directories(${COLLADA_DOM_LIBRARY_DIRS})
