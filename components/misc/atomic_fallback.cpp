@@ -17,21 +17,22 @@
     extern "C" {
         // __atomic_fetch_add_8: 64-bit atomic fetch and add
         // GCC expects these to return the old value
-        int64_t __atomic_fetch_add_8(volatile void* ptr, int64_t value, int)
+        // Note: GCC's built-in uses unsigned long long (uint64_t), so we match that signature
+        unsigned long long __atomic_fetch_add_8(volatile void* ptr, unsigned long long value, int)
         {
             std::lock_guard<std::mutex> lock(g_atomic_fallback_mutex);
-            volatile int64_t* int_ptr = reinterpret_cast<volatile int64_t*>(const_cast<void*>(ptr));
-            int64_t old_value = *int_ptr;
+            volatile unsigned long long* int_ptr = reinterpret_cast<volatile unsigned long long*>(const_cast<void*>(ptr));
+            unsigned long long old_value = *int_ptr;
             *int_ptr = old_value + value;
             return old_value;
         }
 
         // __atomic_fetch_sub_8: 64-bit atomic fetch and subtract
-        int64_t __atomic_fetch_sub_8(volatile void* ptr, int64_t value, int)
+        unsigned long long __atomic_fetch_sub_8(volatile void* ptr, unsigned long long value, int)
         {
             std::lock_guard<std::mutex> lock(g_atomic_fallback_mutex);
-            volatile int64_t* int_ptr = reinterpret_cast<volatile int64_t*>(const_cast<void*>(ptr));
-            int64_t old_value = *int_ptr;
+            volatile unsigned long long* int_ptr = reinterpret_cast<volatile unsigned long long*>(const_cast<void*>(ptr));
+            unsigned long long old_value = *int_ptr;
             *int_ptr = old_value - value;
             return old_value;
         }
