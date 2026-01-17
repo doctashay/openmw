@@ -563,7 +563,11 @@ if (USE_QT)
 
 endif()
 
-include_directories(${BULLET_INCLUDE_DIRS} ${CMAKE_CURRENT_BINARY_DIR})
+# Only add BULLET_INCLUDE_DIRS if it's set and doesn't contain NOTFOUND values
+if(BULLET_INCLUDE_DIRS)
+    include_directories(${BULLET_INCLUDE_DIRS})
+endif()
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 if(OPENMW_USE_SYSTEM_SQLITE3)
     find_package(SQLite3 QUIET)

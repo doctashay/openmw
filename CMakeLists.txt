@@ -568,6 +568,18 @@ if(OPENMW_USE_SYSTEM_BULLET)
     # This file does not define the Bullet version in a CMake-friendly way.
     find_package(Bullet CONFIGS BulletConfig-float64.cmake QUIET COMPONENTS BulletCollision LinearMath)
     if (BULLET_FOUND)
+        # Filter out any NOTFOUND values from BULLET_INCLUDE_DIRS
+        if(BULLET_INCLUDE_DIRS)
+            set(_filtered_bullet_include_dirs)
+            foreach(_dir ${BULLET_INCLUDE_DIRS})
+                if(NOT "${_dir}" MATCHES "-NOTFOUND$")
+                    list(APPEND _filtered_bullet_include_dirs "${_dir}")
+                endif()
+            endforeach()
+            set(BULLET_INCLUDE_DIRS ${_filtered_bullet_include_dirs})
+            unset(_filtered_bullet_include_dirs)
+        endif()
+        
         string(REPLACE "." "" _bullet_version_num ${BULLET_VERSION_STRING})
         if (_bullet_version_num VERSION_LESS REQUIRED_BULLET_VERSION)
             message(WARNING "System bullet version too old (${_bullet_version_num}), required ${REQUIRED_BULLET_VERSION}. Falling back to internal build.")
@@ -584,6 +596,18 @@ if(OPENMW_USE_SYSTEM_BULLET)
         if(NOT BULLET_FOUND)
             message(STATUS "System Bullet not found, will build internally")
             set(OPENMW_USE_SYSTEM_BULLET OFF)
+        else()
+            # Filter out any NOTFOUND values from BULLET_INCLUDE_DIRS
+            if(BULLET_INCLUDE_DIRS)
+                set(_filtered_bullet_include_dirs)
+                foreach(_dir ${BULLET_INCLUDE_DIRS})
+                    if(NOT "${_dir}" MATCHES "-NOTFOUND$")
+                        list(APPEND _filtered_bullet_include_dirs "${_dir}")
+                    endif()
+                endforeach()
+                set(BULLET_INCLUDE_DIRS ${_filtered_bullet_include_dirs})
+                unset(_filtered_bullet_include_dirs)
+            endif()
         endif()
     endif()
 
@@ -599,6 +623,24 @@ if(OPENMW_USE_SYSTEM_BULLET)
             set(OPENMW_USE_SYSTEM_BULLET OFF)
         endif()
     endif()
+    
+    # Clear BULLET_INCLUDE_DIRS if we're falling back to internal build
+    # to remove any NOTFOUND values that might have been set
+    if(NOT OPENMW_USE_SYSTEM_BULLET)
+        unset(BULLET_INCLUDE_DIRS)
+    endif()
+endif()
+
+# Filter out any NOTFOUND values from BULLET_INCLUDE_DIRS
+if(BULLET_INCLUDE_DIRS)
+    set(_filtered_bullet_include_dirs)
+    foreach(_dir ${BULLET_INCLUDE_DIRS})
+        if(NOT "${_dir}" MATCHES "-NOTFOUND$")
+            list(APPEND _filtered_bullet_include_dirs "${_dir}")
+        endif()
+    endforeach()
+    set(BULLET_INCLUDE_DIRS ${_filtered_bullet_include_dirs})
+    unset(_filtered_bullet_include_dirs)
 endif()
 
 if (NOT WIN32 AND BUILD_WIZARD) # windows users can just run the morrowind installer
@@ -665,23 +707,40 @@ set(Boost_USE_STATIC_LIBS OFF)
 set(Boost_USE_STATIC_RUNTIME OFF)
 
 # Minimum required: Boost 1.70.0. Newer versions (1.76, 1.80, 1.85+) should work fine.
-# For MacPorts installations, Boost libraries are in /opt/local/libexec/boost/<version>/lib/
-# or /opt/local/lib/ (depending on the package)
+# MacPorts installs Boost in a non-standard layout:
+# - Headers: /opt/local/include/boost/
+# - Libraries: /opt/local/libexec/boost/<version>/lib/
+# - CMake config: /opt/local/libexec/boost/<version>/lib/cmake/Boost-*/
 if(APPLE AND NOT DEFINED Boost_ROOT)
     # Try to find MacPorts Boost installation
     # Check for newer MacPorts layout (libexec/boost/version/lib/)
     if(EXISTS "/opt/local/libexec/boost/1.81/lib/libboost_program_options-mt.dylib")
+        # MacPorts splits headers and libraries - set both paths
         set(Boost_ROOT "/opt/local/libexec/boost/1.81")
-        message(STATUS "Detected MacPorts Boost 1.81 installation at ${Boost_ROOT}")
+        set(Boost_INCLUDE_DIR "/opt/local/include")
+        set(Boost_LIBRARY_DIR "/opt/local/libexec/boost/1.81/lib")
+        # Also add to CMAKE_PREFIX_PATH to help find_package
+        list(APPEND CMAKE_PREFIX_PATH "/opt/local/libexec/boost/1.81" "/opt/local")
+        message(STATUS "Detected MacPorts Boost 1.81 installation")
+        message(STATUS "  Boost_ROOT: ${Boost_ROOT}")
+        message(STATUS "  Boost_INCLUDE_DIR: ${Boost_INCLUDE_DIR}")
+        message(STATUS "  Boost_LIBRARY_DIR: ${Boost_LIBRARY_DIR}")
     elseif(EXISTS "/opt/local/libexec/boost/1.87/lib/libboost_program_options-mt.dylib")
         set(Boost_ROOT "/opt/local/libexec/boost/1.87")
-        message(STATUS "Detected MacPorts Boost 1.87 installation at ${Boost_ROOT}")
+        set(Boost_INCLUDE_DIR "/opt/local/include")
+        set(Boost_LIBRARY_DIR "/opt/local/libexec/boost/1.87/lib")
+        list(APPEND CMAKE_PREFIX_PATH "/opt/local/libexec/boost/1.87" "/opt/local")
+        message(STATUS "Detected MacPorts Boost 1.87 installation")
     elseif(EXISTS "/opt/local/libexec/boost/1.90/lib/libboost_program_options-mt.dylib")
         set(Boost_ROOT "/opt/local/libexec/boost/1.90")
-        message(STATUS "Detected MacPorts Boost 1.90 installation at ${Boost_ROOT}")
+        set(Boost_INCLUDE_DIR "/opt/local/include")
+        set(Boost_LIBRARY_DIR "/opt/local/libexec/boost/1.90/lib")
+        list(APPEND CMAKE_PREFIX_PATH "/opt/local/libexec/boost/1.90" "/opt/local")
+        message(STATUS "Detected MacPorts Boost 1.90 installation")
     # Check for older MacPorts layout (directly in /opt/local/lib/)
     elseif(EXISTS "/opt/local/lib/libboost_program_options.dylib" OR EXISTS "/opt/local/lib/libboost_program_options-mt.dylib")
         set(Boost_ROOT "/opt/local")
+        list(APPEND CMAKE_PREFIX_PATH "/opt/local")
         message(STATUS "Detected MacPorts Boost installation at ${Boost_ROOT}")
     endif()
 endif()
@@ -692,14 +751,55 @@ if(NOT Boost_FOUND)
     # Fallback to MODULE mode for older Boost installations or MacPorts
     find_package(Boost 1.70.0 MODULE QUIET COMPONENTS ${BOOST_COMPONENTS} OPTIONAL_COMPONENTS ${BOOST_OPTIONAL_COMPONENTS})
 endif()
+
+# If find_package still failed but we detected MacPorts Boost, try manual setup
+if(NOT Boost_FOUND AND DEFINED Boost_LIBRARY_DIR AND EXISTS "${Boost_LIBRARY_DIR}")
+    message(STATUS "find_package failed, trying manual Boost setup for MacPorts...")
+    
+    # Find the libraries manually
+    set(BOOST_FOUND TRUE)
+    set(Boost_VERSION 1.81.0)
+    set(Boost_VERSION_MAJOR 1)
+    set(Boost_VERSION_MINOR 81)
+    set(Boost_VERSION_PATCH 0)
+    
+    # Find program_options library
+    find_library(Boost_program_options_LIBRARY
+        NAMES boost_program_options-mt boost_program_options
+        PATHS ${Boost_LIBRARY_DIR}
+        NO_DEFAULT_PATH
+    )
+    
+    # Find iostreams library
+    find_library(Boost_iostreams_LIBRARY
+        NAMES boost_iostreams-mt boost_iostreams
+        PATHS ${Boost_LIBRARY_DIR}
+        NO_DEFAULT_PATH
+    )
+    
+    if(Boost_program_options_LIBRARY AND Boost_iostreams_LIBRARY)
+        set(Boost_LIBRARIES ${Boost_program_options_LIBRARY} ${Boost_iostreams_LIBRARY})
+        set(Boost_INCLUDE_DIRS ${Boost_INCLUDE_DIR})
+        set(Boost_FOUND TRUE)
+        message(STATUS "Manually configured Boost:")
+        message(STATUS "  Version: ${Boost_VERSION}")
+        message(STATUS "  Include: ${Boost_INCLUDE_DIRS}")
+        message(STATUS "  Libraries: ${Boost_LIBRARIES}")
+    else()
+        set(BOOST_FOUND FALSE)
+        message(WARNING "Could not find Boost libraries in ${Boost_LIBRARY_DIR}")
+    endif()
+endif()
+
 if(NOT Boost_FOUND)
     message(FATAL_ERROR "Boost 1.70.0 or later is required but not found.\n"
         "Boost is installed (boost181) but CMake cannot find it.\n"
         "Try one of these solutions:\n"
-        "  1. Set Boost_ROOT explicitly: cmake . -D Boost_ROOT=/opt/local\n"
-        "  2. Or set environment variable: export Boost_ROOT=/opt/local\n"
+        "  1. Set Boost_ROOT explicitly: cmake . -D Boost_ROOT=/opt/local/libexec/boost/1.81\n"
+        "  2. Or set environment variable: export Boost_ROOT=/opt/local/libexec/boost/1.81\n"
         "  3. Verify boost181 is installed: port installed boost181\n"
-        "  4. Check library location: port contents boost181 | grep dylib")
+        "  4. Check library location: port contents boost181 | grep dylib\n"
+        "  5. Check headers exist: ls -d /opt/local/include/boost")
 endif()
 
 # Check Boost ABI compatibility for PowerPC/macOS 10.5
@@ -997,12 +1097,15 @@ include_directories(
     BEFORE SYSTEM
     ${OPENAL_INCLUDE_DIR}
     ${OPENGL_INCLUDE_DIR}
-    ${BULLET_INCLUDE_DIRS}
     ${LUA_INCLUDE_DIR}
     ${SOL_INCLUDE_DIR}
     ${SOL_CONFIG_DIR}
     ${ICU_INCLUDE_DIRS}
 )
+# Only add BULLET_INCLUDE_DIRS if it's set and doesn't contain NOTFOUND values
+if(BULLET_INCLUDE_DIRS)
+    include_directories(BEFORE SYSTEM ${BULLET_INCLUDE_DIRS})
+endif()
 # Always add MyGUI include directories (for both system and internal builds)
 if(MyGUI_INCLUDE_DIRS)
     include_directories(BEFORE SYSTEM ${MyGUI_INCLUDE_DIRS})
