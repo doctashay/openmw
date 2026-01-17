@@ -16,6 +16,30 @@ if [ ! -d "$SDK_PATH" ]; then
     exit 1
 fi
 
+# Verify compilers exist and get their absolute paths
+if ! command -v gcc-mp-14 >/dev/null 2>&1; then
+    echo "ERROR: gcc-mp-14 not found. Please install via MacPorts: sudo port install gcc14"
+    exit 1
+fi
+
+if ! command -v g++-mp-14 >/dev/null 2>&1; then
+    echo "ERROR: g++-mp-14 not found. Please install via MacPorts: sudo port install gcc14"
+    exit 1
+fi
+
+# Get absolute paths to compilers
+GCC_MP14=$(which gcc-mp-14)
+GXX_MP14=$(which g++-mp-14)
+
+echo "Using compilers:"
+echo "  C compiler: $GCC_MP14"
+echo "  C++ compiler: $GXX_MP14"
+echo ""
+
+# Set environment variables so CMake uses the correct compilers
+export CC="$GCC_MP14"
+export CXX="$GXX_MP14"
+
 # Clean and create build directory
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
@@ -33,8 +57,8 @@ CMAKE_ARGS=(
     -D CMAKE_OSX_SYSROOT="$SDK_PATH"
     -D OPENMW_MACOSX_10_5_BUILD=ON
     -D OPENMW_POWERPC_BUILD=ON
-    -D CMAKE_C_COMPILER="gcc-mp-14"
-    -D CMAKE_CXX_COMPILER="g++-mp-14"
+    -D CMAKE_C_COMPILER="$GCC_MP14"
+    -D CMAKE_CXX_COMPILER="$GXX_MP14"
     -D OPENMW_UNITY_BUILD=ON
     -D BUILD_LAUNCHER=OFF
     -D BUILD_OPENCS=OFF
