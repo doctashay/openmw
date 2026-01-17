@@ -12,7 +12,8 @@ namespace ESM
 {
     namespace
     {
-        static const std::string emptyString;
+        // Use inline for unity build compatibility (C++17+)
+        inline const std::string emptyString;
 
         struct GetRefString
         {

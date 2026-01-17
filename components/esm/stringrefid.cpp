@@ -16,7 +16,8 @@ namespace ESM
     {
         using StringsSet = std::unordered_set<std::string, Misc::StringUtils::CiHash, Misc::StringUtils::CiEqual>;
 
-        static const std::string emptyString;
+        // Use inline for unity build compatibility (C++17+)
+        inline const std::string emptyString;
 
         Misc::ScopeGuarded<StringsSet>& getRefIds()
         {
