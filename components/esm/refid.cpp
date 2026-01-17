@@ -12,8 +12,8 @@ namespace ESM
 {
     namespace
     {
-        // Use function to avoid unity build redefinition issues
-        const std::string& getEmptyString()
+        // Use inline function with unique name to avoid unity build redefinition issues
+        inline const std::string& getRefIdEmptyString()
         {
             static const std::string emptyString;
             return emptyString;
@@ -21,7 +21,7 @@ namespace ESM
 
         struct GetRefString
         {
-            const std::string& operator()(EmptyRefId /*v*/) const { return getEmptyString(); }
+            const std::string& operator()(EmptyRefId /*v*/) const { return getRefIdEmptyString(); }
 
             const std::string& operator()(StringRefId v) const { return v.getValue(); }
 
