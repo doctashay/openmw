@@ -609,7 +609,8 @@ if(OPENMW_USE_SYSTEM_OSG)
     endif()
 endif()
 
-if(OPENMW_USE_SYSTEM_OSG)
+# Always add OSG include directories (for both system and internal builds)
+if(OPENSCENEGRAPH_INCLUDE_DIRS)
     include_directories(BEFORE SYSTEM ${OPENSCENEGRAPH_INCLUDE_DIRS})
 endif()
 
@@ -691,7 +692,8 @@ include_directories(
     ${SOL_CONFIG_DIR}
     ${ICU_INCLUDE_DIRS}
 )
-if(OPENMW_USE_SYSTEM_MYGUI AND MyGUI_INCLUDE_DIRS)
+# Always add MyGUI include directories (for both system and internal builds)
+if(MyGUI_INCLUDE_DIRS)
     include_directories(BEFORE SYSTEM ${MyGUI_INCLUDE_DIRS})
 endif()
 include_directories(".")
