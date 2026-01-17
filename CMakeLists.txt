@@ -646,11 +646,17 @@ endif()
 
 # Check Boost ABI compatibility for PowerPC/macOS 10.5
 # MacPorts Boost may be built with Clang/libc++, but we're using GCC/libstdc++
+# IMPORTANT: MacPorts must be configured with 'cxx_stdlib libstdc++' in macports.conf
+# and Boost should be installed with compiler=gcc-14 variant to ensure libstdc++ is used
 # Detect ABI mismatches and stop the build if incompatible
 if(APPLE AND (CMAKE_OSX_ARCHITECTURES MATCHES "ppc" OR OPENMW_POWERPC_BUILD))
     message(STATUS "Checking Boost ABI compatibility...")
     message(STATUS "Boost found: ${Boost_VERSION}")
     message(STATUS "Boost libraries: ${Boost_LIBRARIES}")
+    message(STATUS "")
+    message(STATUS "NOTE: For MacPorts Boost, ensure 'cxx_stdlib libstdc++' is set in macports.conf")
+    message(STATUS "      and install with: sudo port install boost176 compiler=gcc-14")
+    message(STATUS "")
     
     # Determine our build's ABI settings
     set(OUR_STDLIB "unknown")
@@ -799,10 +805,18 @@ if(APPLE AND (CMAKE_OSX_ARCHITECTURES MATCHES "ppc" OR OPENMW_POWERPC_BUILD))
                 "  ./build_boost_ppc.sh\n"
                 "  export Boost_ROOT=/opt/local/boost-gcc14-ppc\n"
                 "\n"
-                "Option 2: MacPorts (if supported):\n"
-                "  sudo port -s install boost176 +universal compiler=gcc-14\n"
+                "Option 2: MacPorts (ensure cxx_stdlib libstdc++ in macports.conf):\n"
+                "  # Verify MacPorts config has: cxx_stdlib libstdc++\n"
+                "  # Then install with GCC compiler variant:\n"
+                "  sudo port -s install boost176 compiler=gcc-14\n"
+                "  # Or uninstall and reinstall:\n"
+                "  sudo port uninstall boost176\n"
+                "  sudo port install boost176 compiler=gcc-14\n"
                 "\n"
                 "Then rerun CMake with: -D Boost_ROOT=<path_to_boost>\n"
+                "\n"
+                "To verify Boost's runtime, run:\n"
+                "  otool -L $(port file boost176 | grep -A5 'files' | head -1)/lib/libboost_program_options*.dylib\n"
                 "================================================================================\n"
             )
         elseif(BOOST_STDLIB STREQUAL "libstdc++" AND OUR_STDLIB STREQUAL "libc++")
