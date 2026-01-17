@@ -340,23 +340,31 @@ if(NOT LZ4_FOUND)
 endif()
 
 if (USE_QT)
-    # Qt version selection for macOS 10.5
-    # Default to Qt4 for macOS 10.5, Qt6 otherwise
-    if(OPENMW_MACOSX_10_5)
+    # Qt version selection for macOS 10.5 and PowerPC
+    # Default to Qt4 for macOS 10.5 and PowerPC, Qt6 otherwise
+    if(OPENMW_MACOSX_10_5 OR OPENMW_POWERPC_BUILD)
         set(OPENMW_QT_VERSION_DEFAULT 4)
-        message(STATUS "macOS 10.5 detected: defaulting to Qt4")
+        if(OPENMW_MACOSX_10_5)
+            message(STATUS "macOS 10.5 detected: defaulting to Qt4")
+        else()
+            message(STATUS "PowerPC build detected: defaulting to Qt4")
+        endif()
     else()
         set(OPENMW_QT_VERSION_DEFAULT 6)
     endif()
     option(OPENMW_QT_VERSION "Qt version to use (4 or 6)" ${OPENMW_QT_VERSION_DEFAULT})
     
-    if(OPENMW_MACOSX_10_5)
-        # macOS 10.5 requires Qt4 - force it even if user tries to override
+    if(OPENMW_MACOSX_10_5 OR OPENMW_POWERPC_BUILD)
+        # macOS 10.5 and PowerPC require Qt4 - force it even if user tries to override
         if(NOT OPENMW_QT_VERSION EQUAL 4)
-            message(WARNING "macOS 10.5 only supports Qt4, forcing Qt4 (ignoring Qt version ${OPENMW_QT_VERSION})")
+            message(WARNING "macOS 10.5/PowerPC only supports Qt4, forcing Qt4 (ignoring Qt version ${OPENMW_QT_VERSION})")
             set(OPENMW_QT_VERSION 4 CACHE STRING "Qt version" FORCE)
         endif()
-        message(STATUS "macOS 10.5 build: using Qt4")
+        if(OPENMW_MACOSX_10_5)
+            message(STATUS "macOS 10.5 build: using Qt4")
+        else()
+            message(STATUS "PowerPC build: using Qt4")
+        endif()
     endif()
     
     if(OPENMW_QT_VERSION EQUAL 4)
