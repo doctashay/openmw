@@ -6,6 +6,12 @@ if(POLICY CMP0135)
     cmake_policy(SET CMP0135 NEW)
 endif()
 
+# Suppress warning about FindBoost module deprecation (CMP0167)
+# We still need MODULE mode fallback for MacPorts installations
+if(POLICY CMP0167)
+    cmake_policy(SET CMP0167 OLD)
+endif()
+
 project(OpenMW)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -620,7 +626,7 @@ if(NOT HAVE_STDINT_H)
 endif()
 
 if(OPENMW_USE_SYSTEM_OSG)
-    find_package(OpenSceneGraph 3.6.5 QUIET ${USED_OSG_COMPONENTS})  # Bump to 3.6.6 when released
+    find_package(OpenSceneGraph 3.6.5 QUIET COMPONENTS ${USED_OSG_COMPONENTS})  # Bump to 3.6.6 when released
 
     if(NOT OpenSceneGraph_FOUND)
         message(STATUS "System OpenSceneGraph not found, will build internally")
@@ -654,9 +660,19 @@ endif(HAVE_MULTIVIEW)
 
 set(BOOST_COMPONENTS iostreams program_options)
 
-# Explicitly use shared libraries (MacPorts boost176 is built with +no_static)
+# Explicitly use shared libraries (MacPorts boost packages are built with +no_static)
 set(Boost_USE_STATIC_LIBS OFF)
 set(Boost_USE_STATIC_RUNTIME OFF)
+
+# Minimum required: Boost 1.70.0. Newer versions (1.76, 1.80, 1.85+) should work fine.
+# For MacPorts installations, Boost is typically in /opt/local
+if(APPLE AND NOT DEFINED Boost_ROOT)
+    # Try to find MacPorts Boost installation
+    if(EXISTS "/opt/local/lib/libboost_program_options.dylib" OR EXISTS "/opt/local/lib/libboost_program_options-mt.dylib")
+        set(Boost_ROOT "/opt/local")
+        message(STATUS "Detected MacPorts Boost installation at ${Boost_ROOT}")
+    endif()
+endif()
 
 # Try CONFIG mode first (modern Boost), fallback to MODULE mode (older installations/MacPorts)
 find_package(Boost 1.70.0 CONFIG QUIET COMPONENTS ${BOOST_COMPONENTS} OPTIONAL_COMPONENTS ${BOOST_OPTIONAL_COMPONENTS})
@@ -665,7 +681,13 @@ if(NOT Boost_FOUND)
     find_package(Boost 1.70.0 MODULE QUIET COMPONENTS ${BOOST_COMPONENTS} OPTIONAL_COMPONENTS ${BOOST_OPTIONAL_COMPONENTS})
 endif()
 if(NOT Boost_FOUND)
-    message(FATAL_ERROR "Boost 1.70.0 or later is required. Please install Boost via MacPorts:\n  sudo port install boost\nOr set Boost_ROOT to the Boost installation directory.")
+    message(FATAL_ERROR "Boost 1.70.0 or later is required but not found.\n"
+        "Boost is installed (boost181) but CMake cannot find it.\n"
+        "Try one of these solutions:\n"
+        "  1. Set Boost_ROOT explicitly: cmake . -D Boost_ROOT=/opt/local\n"
+        "  2. Or set environment variable: export Boost_ROOT=/opt/local\n"
+        "  3. Verify boost181 is installed: port installed boost181\n"
+        "  4. Check library location: port contents boost181 | grep dylib")
 endif()
 
 # Check Boost ABI compatibility for PowerPC/macOS 10.5
@@ -679,7 +701,8 @@ if(APPLE AND (CMAKE_OSX_ARCHITECTURES MATCHES "ppc" OR OPENMW_POWERPC_BUILD))
     message(STATUS "Boost libraries: ${Boost_LIBRARIES}")
     message(STATUS "")
     message(STATUS "NOTE: For MacPorts Boost, ensure 'cxx_stdlib libstdc++' is set in macports.conf")
-    message(STATUS "      and install with: sudo port install boost176 compiler=gcc-14")
+    message(STATUS "      and install with: sudo port install boost compiler=gcc-14")
+    message(STATUS "      (boost176, boost180, etc. are package names - any Boost 1.70+ works)")
     message(STATUS "")
     
     # Determine our build's ABI settings
@@ -831,16 +854,15 @@ if(APPLE AND (CMAKE_OSX_ARCHITECTURES MATCHES "ppc" OR OPENMW_POWERPC_BUILD))
                 "\n"
                 "Option 2: MacPorts (ensure cxx_stdlib libstdc++ in macports.conf):\n"
                 "  # Verify MacPorts config has: cxx_stdlib libstdc++\n"
-                "  # Then install with GCC compiler variant:\n"
+                "  # Then install with GCC compiler variant (any Boost 1.70+ works):\n"
+                "  sudo port -s install boost compiler=gcc-14\n"
+                "  # Or for a specific version (e.g., boost176, boost180):\n"
                 "  sudo port -s install boost176 compiler=gcc-14\n"
-                "  # Or uninstall and reinstall:\n"
-                "  sudo port uninstall boost176\n"
-                "  sudo port install boost176 compiler=gcc-14\n"
                 "\n"
                 "Then rerun CMake with: -D Boost_ROOT=<path_to_boost>\n"
                 "\n"
                 "To verify Boost's runtime, run:\n"
-                "  otool -L $(port file boost176 | grep -A5 'files' | head -1)/lib/libboost_program_options*.dylib\n"
+                "  otool -L $(port file boost | grep -A5 'files' | head -1)/lib/libboost_program_options*.dylib\n"
                 "================================================================================\n"
             )
         elseif(BOOST_STDLIB STREQUAL "libstdc++" AND OUR_STDLIB STREQUAL "libc++")
