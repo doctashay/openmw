@@ -165,6 +165,24 @@ if(NOT OPENMW_USE_SYSTEM_OSG)
     )
     FetchContent_MakeAvailable(osg)
 
+    # Patch OSG for macOS 10.5 compatibility: SYS_thread_selfid is not available
+    if(OPENMW_MACOSX_10_5)
+        set(OSG_PTHREAD_FILE "${osg_SOURCE_DIR}/src/OpenThreads/pthreads/PThread.cpp")
+        if(EXISTS "${OSG_PTHREAD_FILE}")
+            file(READ "${OSG_PTHREAD_FILE}" OSG_PTHREAD_CONTENT)
+            # Replace syscall(SYS_thread_selfid) with pthread_self() for macOS 10.5
+            # SYS_thread_selfid was introduced in macOS 10.6, not available in 10.5
+            string(REPLACE 
+                "return (size_t)::syscall(SYS_thread_selfid);"
+                "return reinterpret_cast<size_t>(pthread_self());"
+                OSG_PTHREAD_CONTENT "${OSG_PTHREAD_CONTENT}")
+            file(WRITE "${OSG_PTHREAD_FILE}" "${OSG_PTHREAD_CONTENT}")
+            message(STATUS "Patched OSG PThread.cpp for macOS 10.5 compatibility (SYS_thread_selfid -> pthread_self)")
+        else()
+            message(WARNING "OSG PThread.cpp not found at ${OSG_PTHREAD_FILE} - patch may not be applied")
+        endif()
+    endif()
+
     set(OPENSCENEGRAPH_INCLUDE_DIRS ${osg_SOURCE_DIR}/include ${osg_BINARY_DIR}/include PARENT_SCOPE)
     set(OSG_LIBRARIES OpenThreads osg PARENT_SCOPE)
     foreach(_name ${USED_OSG_COMPONENTS})
