@@ -635,6 +635,51 @@ if(NOT Boost_FOUND)
     message(FATAL_ERROR "Boost 1.70.0 or later is required. Please install Boost via MacPorts:\n  sudo port install boost\nOr set Boost_ROOT to the Boost installation directory.")
 endif()
 
+# Check Boost ABI compatibility for PowerPC/macOS 10.5
+# MacPorts Boost may be built with Clang/libc++, but we're using GCC/libstdc++
+# Try to detect and warn about potential ABI mismatches
+if(APPLE AND CMAKE_OSX_ARCHITECTURES MATCHES "ppc")
+    message(STATUS "Boost found: ${Boost_VERSION}")
+    message(STATUS "Boost libraries: ${Boost_LIBRARIES}")
+    message(STATUS "Boost include dirs: ${Boost_INCLUDE_DIRS}")
+    
+    # Check if Boost libraries exist and are for PowerPC
+    if(Boost_LIBRARIES)
+        list(GET Boost_LIBRARIES 0 FIRST_BOOST_LIB)
+        if(EXISTS "${FIRST_BOOST_LIB}")
+            execute_process(
+                COMMAND file "${FIRST_BOOST_LIB}"
+                OUTPUT_VARIABLE BOOST_LIB_INFO
+                ERROR_QUIET
+            )
+            message(STATUS "Boost library info: ${BOOST_LIB_INFO}")
+            
+            # Check architecture
+            execute_process(
+                COMMAND lipo -info "${FIRST_BOOST_LIB}"
+                OUTPUT_VARIABLE BOOST_ARCH_INFO
+                ERROR_QUIET
+            )
+            if(BOOST_ARCH_INFO)
+                message(STATUS "Boost architecture: ${BOOST_ARCH_INFO}")
+            endif()
+        endif()
+    endif()
+    
+    # Try to work around ABI mismatch by ensuring we use the same C++11 ABI
+    # MacPorts Boost might be built with Clang/libc++ or different GCC settings
+    # For GCC 14, we should use C++11 ABI (default), but Boost might have been built differently
+    # Try adding flag to match Boost's ABI if it was built with older settings
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        # GCC 14 defaults to C++11 ABI, but if Boost was built with older GCC or Clang,
+        # we might need to match. However, this is risky - better to rebuild Boost.
+        message(STATUS "Note: If you get vtable errors, Boost may have been built with a different compiler/ABI.")
+        message(STATUS "Solution: Rebuild Boost with gcc-mp-14:")
+        message(STATUS "  sudo port -s install boost +universal compiler=gcc-14")
+        message(STATUS "Or manually rebuild boost176 port with your compiler settings.")
+    endif()
+endif()
+
 if(OPENMW_USE_SYSTEM_MYGUI)
     find_package(MyGUI 3.4.3 QUIET)
     if(NOT MyGUI_FOUND)

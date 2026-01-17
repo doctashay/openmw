@@ -628,6 +628,17 @@ target_link_libraries(components
     ZLIB::ZLIB
     )
 
+# PowerPC may need libatomic for 64-bit atomic operations
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "ppc|powerpc" OR CMAKE_OSX_ARCHITECTURES MATCHES "ppc")
+    find_library(ATOMIC_LIB atomic)
+    if(ATOMIC_LIB)
+        target_link_libraries(components ${ATOMIC_LIB})
+        message(STATUS "Linking libatomic for PowerPC atomic operations")
+    else()
+        message(WARNING "libatomic not found - atomic operations may fail on PowerPC")
+    endif()
+endif()
+
 if(yaml-cpp_VERSION VERSION_GREATER_EQUAL 0.8.0)
     target_link_libraries(components yaml-cpp::yaml-cpp)
 else()
