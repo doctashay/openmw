@@ -880,7 +880,7 @@ if(APPLE AND (CMAKE_OSX_ARCHITECTURES MATCHES "ppc" OR OPENMW_POWERPC_BUILD))
         if(NOT ABI_MISMATCH AND NOT WORKAROUND_APPLIED)
             message(STATUS "✓ Boost ABI compatibility check passed")
         endif()
-    else
+    else()
         message(WARNING "Could not fully analyze Boost ABI - proceeding with caution")
         message(WARNING "If you encounter linker errors (vtable errors, undefined symbols),")
         message(WARNING "Boost may have been built with a different compiler/ABI.")
