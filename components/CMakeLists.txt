@@ -565,7 +565,20 @@ endif()
 
 include_directories(${BULLET_INCLUDE_DIRS} ${CMAKE_CURRENT_BINARY_DIR})
 
-find_package(SQLite3 REQUIRED)
+if(OPENMW_USE_SYSTEM_SQLITE3)
+    find_package(SQLite3 QUIET)
+    if(NOT SQLite3_FOUND)
+        message(STATUS "System SQLite3 not found, will build internally")
+        set(OPENMW_USE_SYSTEM_SQLITE3 OFF)
+    endif()
+endif()
+if(NOT OPENMW_USE_SYSTEM_SQLITE3)
+    # SQLite3 will be built internally via extern/CMakeLists.txt
+    # The extern/CMakeLists.txt sets SQLite3_INCLUDE_DIR and SQLite3_LIBRARY
+    # So we don't need to find it here
+else()
+    find_package(SQLite3 REQUIRED)
+endif()
 
 add_library(components STATIC ${COMPONENT_FILES})
 
