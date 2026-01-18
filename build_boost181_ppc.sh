@@ -98,10 +98,26 @@ EOF
 echo "Created user-config.jam with compiler: $GXX_MP14"
 echo ""
 
+# Detect number of CPU cores for parallel compilation
+if command -v sysctl >/dev/null 2>&1; then
+    # macOS
+    NUM_JOBS=$(sysctl -n hw.ncpu 2>/dev/null || echo "2")
+elif command -v nproc >/dev/null 2>&1; then
+    # Linux
+    NUM_JOBS=$(nproc 2>/dev/null || echo "2")
+else
+    NUM_JOBS=2
+fi
+
+echo "Using $NUM_JOBS parallel jobs for faster compilation"
+echo ""
+
 # Build with your exact settings
 # The user-config.jam will be automatically picked up by b2
 # We specify toolset=gcc which will use the definition from user-config.jam
+# -j$NUM_JOBS enables parallel compilation
 ./b2 \
+    -j$NUM_JOBS \
     toolset=gcc \
     architecture=power \
     address-model=32_64 \
