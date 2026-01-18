@@ -668,6 +668,61 @@ if(NOT Boost_FOUND)
     message(FATAL_ERROR "Boost 1.70.0 or later is required. Please install Boost via MacPorts:\n  sudo port install boost\nOr set Boost_ROOT to the Boost installation directory.")
 endif()
 
+# Create imported targets if they don't exist (MODULE mode doesn't create them)
+if(NOT TARGET Boost::program_options)
+    add_library(Boost::program_options IMPORTED UNKNOWN)
+    set(BOOST_PO_FOUND FALSE)
+    if(Boost_PROGRAM_OPTIONS_LIBRARY_RELEASE)
+        set_target_properties(Boost::program_options PROPERTIES
+            IMPORTED_LOCATION_RELEASE "${Boost_PROGRAM_OPTIONS_LIBRARY_RELEASE}")
+        set(BOOST_PO_FOUND TRUE)
+    endif()
+    if(Boost_PROGRAM_OPTIONS_LIBRARY_DEBUG)
+        set_target_properties(Boost::program_options PROPERTIES
+            IMPORTED_LOCATION_DEBUG "${Boost_PROGRAM_OPTIONS_LIBRARY_DEBUG}")
+        set(BOOST_PO_FOUND TRUE)
+    endif()
+    if(Boost_PROGRAM_OPTIONS_LIBRARY)
+        set_target_properties(Boost::program_options PROPERTIES
+            IMPORTED_LOCATION "${Boost_PROGRAM_OPTIONS_LIBRARY}")
+        set(BOOST_PO_FOUND TRUE)
+    endif()
+    if(Boost_INCLUDE_DIRS)
+        set_target_properties(Boost::program_options PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${Boost_INCLUDE_DIRS}")
+    endif()
+    if(NOT BOOST_PO_FOUND)
+        message(FATAL_ERROR "Boost::program_options library not found. Boost_PROGRAM_OPTIONS_LIBRARY is not set. Please ensure Boost is properly installed and Boost_ROOT is set correctly.")
+    endif()
+endif()
+
+if(NOT TARGET Boost::iostreams)
+    add_library(Boost::iostreams IMPORTED UNKNOWN)
+    set(BOOST_IOSTREAMS_FOUND FALSE)
+    if(Boost_IOSTREAMS_LIBRARY_RELEASE)
+        set_target_properties(Boost::iostreams PROPERTIES
+            IMPORTED_LOCATION_RELEASE "${Boost_IOSTREAMS_LIBRARY_RELEASE}")
+        set(BOOST_IOSTREAMS_FOUND TRUE)
+    endif()
+    if(Boost_IOSTREAMS_LIBRARY_DEBUG)
+        set_target_properties(Boost::iostreams PROPERTIES
+            IMPORTED_LOCATION_DEBUG "${Boost_IOSTREAMS_LIBRARY_DEBUG}")
+        set(BOOST_IOSTREAMS_FOUND TRUE)
+    endif()
+    if(Boost_IOSTREAMS_LIBRARY)
+        set_target_properties(Boost::iostreams PROPERTIES
+            IMPORTED_LOCATION "${Boost_IOSTREAMS_LIBRARY}")
+        set(BOOST_IOSTREAMS_FOUND TRUE)
+    endif()
+    if(Boost_INCLUDE_DIRS)
+        set_target_properties(Boost::iostreams PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${Boost_INCLUDE_DIRS}")
+    endif()
+    if(NOT BOOST_IOSTREAMS_FOUND)
+        message(FATAL_ERROR "Boost::iostreams library not found. Boost_IOSTREAMS_LIBRARY is not set. Please ensure Boost is properly installed and Boost_ROOT is set correctly.")
+    endif()
+endif()
+
 # For PowerPC builds, verify program_options library has PowerPC architecture
 if(APPLE AND (CMAKE_OSX_ARCHITECTURES MATCHES "ppc" OR OPENMW_POWERPC_BUILD))
     # Try to find the actual program_options library file
