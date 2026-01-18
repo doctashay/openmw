@@ -658,6 +658,12 @@ set(BOOST_COMPONENTS iostreams program_options)
 set(Boost_USE_STATIC_LIBS OFF)
 set(Boost_USE_STATIC_RUNTIME OFF)
 
+# Check environment variable for Boost_ROOT if not set as CMake variable
+if(NOT Boost_ROOT AND DEFINED ENV{Boost_ROOT})
+    set(Boost_ROOT "$ENV{Boost_ROOT}" CACHE PATH "Boost root directory")
+    message(STATUS "Using Boost_ROOT from environment: ${Boost_ROOT}")
+endif()
+
 # Try CONFIG mode first (modern Boost), fallback to MODULE mode (older installations/MacPorts)
 find_package(Boost 1.70.0 CONFIG QUIET COMPONENTS ${BOOST_COMPONENTS} OPTIONAL_COMPONENTS ${BOOST_OPTIONAL_COMPONENTS})
 if(NOT Boost_FOUND)
@@ -667,6 +673,14 @@ endif()
 if(NOT Boost_FOUND)
     message(FATAL_ERROR "Boost 1.70.0 or later is required. Please install Boost via MacPorts:\n  sudo port install boost\nOr set Boost_ROOT to the Boost installation directory.")
 endif()
+
+# Debug output
+message(STATUS "Boost found: ${Boost_FOUND}")
+message(STATUS "Boost_VERSION: ${Boost_VERSION}")
+message(STATUS "Boost_ROOT: ${Boost_ROOT}")
+message(STATUS "Boost_LIBRARY_DIRS: ${Boost_LIBRARY_DIRS}")
+message(STATUS "Boost_INCLUDE_DIRS: ${Boost_INCLUDE_DIRS}")
+message(STATUS "Boost_LIBRARIES: ${Boost_LIBRARIES}")
 
 # Create imported targets if they don't exist (MODULE mode doesn't create them)
 if(NOT TARGET Boost::program_options)
@@ -732,18 +746,24 @@ if(NOT TARGET Boost::program_options)
         endif()
     endif()
     
-    # Fallback: Use Boost_ROOT if set
-    if(NOT BOOST_PO_FOUND AND Boost_ROOT)
-        find_library(BOOST_PO_LIB_TMP
-            NAMES boost_program_options
-            PATHS "${Boost_ROOT}/lib"
-            NO_DEFAULT_PATH
-        )
-        if(BOOST_PO_LIB_TMP)
-            set_target_properties(Boost::program_options PROPERTIES
-                IMPORTED_LOCATION "${BOOST_PO_LIB_TMP}")
-            set(BOOST_PO_FOUND TRUE)
-            set(BOOST_PO_LIB "${BOOST_PO_LIB_TMP}")
+    # Fallback: Use Boost_ROOT if set (CMake variable or environment variable)
+    if(NOT BOOST_PO_FOUND)
+        set(BOOST_ROOT_TO_CHECK "${Boost_ROOT}")
+        if(NOT BOOST_ROOT_TO_CHECK AND DEFINED ENV{Boost_ROOT})
+            set(BOOST_ROOT_TO_CHECK "$ENV{Boost_ROOT}")
+        endif()
+        if(BOOST_ROOT_TO_CHECK)
+            find_library(BOOST_PO_LIB_TMP
+                NAMES boost_program_options
+                PATHS "${BOOST_ROOT_TO_CHECK}/lib"
+                NO_DEFAULT_PATH
+            )
+            if(BOOST_PO_LIB_TMP)
+                set_target_properties(Boost::program_options PROPERTIES
+                    IMPORTED_LOCATION "${BOOST_PO_LIB_TMP}")
+                set(BOOST_PO_FOUND TRUE)
+                set(BOOST_PO_LIB "${BOOST_PO_LIB_TMP}")
+            endif()
         endif()
     endif()
     
@@ -753,13 +773,20 @@ if(NOT TARGET Boost::program_options)
     endif()
     
     if(NOT BOOST_PO_FOUND)
+        set(ENV_BOOST_ROOT "")
+        if(DEFINED ENV{Boost_ROOT})
+            set(ENV_BOOST_ROOT "$ENV{Boost_ROOT}")
+        endif()
         message(FATAL_ERROR 
             "Boost::program_options library not found.\n"
             "Boost_PROGRAM_OPTIONS_LIBRARY: ${Boost_PROGRAM_OPTIONS_LIBRARY}\n"
             "Boost_LIBRARIES: ${Boost_LIBRARIES}\n"
             "Boost_LIBRARY_DIRS: ${Boost_LIBRARY_DIRS}\n"
-            "Boost_ROOT: ${Boost_ROOT}\n"
-            "Please ensure Boost is properly installed and Boost_ROOT is set correctly.")
+            "Boost_ROOT (CMake): ${Boost_ROOT}\n"
+            "Boost_ROOT (env): ${ENV_BOOST_ROOT}\n"
+            "Please ensure Boost is properly installed and set Boost_ROOT:\n"
+            "  -D Boost_ROOT=/opt/local/boost181-gcc14-ppc\n"
+            "  or export Boost_ROOT=/opt/local/boost181-gcc14-ppc")
     endif()
 endif()
 
@@ -823,18 +850,24 @@ if(NOT TARGET Boost::iostreams)
         endif()
     endif()
     
-    # Fallback: Use Boost_ROOT if set
-    if(NOT BOOST_IOSTREAMS_FOUND AND Boost_ROOT)
-        find_library(BOOST_IOSTREAMS_LIB_TMP
-            NAMES boost_iostreams
-            PATHS "${Boost_ROOT}/lib"
-            NO_DEFAULT_PATH
-        )
-        if(BOOST_IOSTREAMS_LIB_TMP)
-            set_target_properties(Boost::iostreams PROPERTIES
-                IMPORTED_LOCATION "${BOOST_IOSTREAMS_LIB_TMP}")
-            set(BOOST_IOSTREAMS_FOUND TRUE)
-            set(BOOST_IOSTREAMS_LIB "${BOOST_IOSTREAMS_LIB_TMP}")
+    # Fallback: Use Boost_ROOT if set (CMake variable or environment variable)
+    if(NOT BOOST_IOSTREAMS_FOUND)
+        set(BOOST_ROOT_TO_CHECK "${Boost_ROOT}")
+        if(NOT BOOST_ROOT_TO_CHECK AND DEFINED ENV{Boost_ROOT})
+            set(BOOST_ROOT_TO_CHECK "$ENV{Boost_ROOT}")
+        endif()
+        if(BOOST_ROOT_TO_CHECK)
+            find_library(BOOST_IOSTREAMS_LIB_TMP
+                NAMES boost_iostreams
+                PATHS "${BOOST_ROOT_TO_CHECK}/lib"
+                NO_DEFAULT_PATH
+            )
+            if(BOOST_IOSTREAMS_LIB_TMP)
+                set_target_properties(Boost::iostreams PROPERTIES
+                    IMPORTED_LOCATION "${BOOST_IOSTREAMS_LIB_TMP}")
+                set(BOOST_IOSTREAMS_FOUND TRUE)
+                set(BOOST_IOSTREAMS_LIB "${BOOST_IOSTREAMS_LIB_TMP}")
+            endif()
         endif()
     endif()
     
@@ -844,13 +877,20 @@ if(NOT TARGET Boost::iostreams)
     endif()
     
     if(NOT BOOST_IOSTREAMS_FOUND)
+        set(ENV_BOOST_ROOT "")
+        if(DEFINED ENV{Boost_ROOT})
+            set(ENV_BOOST_ROOT "$ENV{Boost_ROOT}")
+        endif()
         message(FATAL_ERROR 
             "Boost::iostreams library not found.\n"
             "Boost_IOSTREAMS_LIBRARY: ${Boost_IOSTREAMS_LIBRARY}\n"
             "Boost_LIBRARIES: ${Boost_LIBRARIES}\n"
             "Boost_LIBRARY_DIRS: ${Boost_LIBRARY_DIRS}\n"
-            "Boost_ROOT: ${Boost_ROOT}\n"
-            "Please ensure Boost is properly installed and Boost_ROOT is set correctly.")
+            "Boost_ROOT (CMake): ${Boost_ROOT}\n"
+            "Boost_ROOT (env): ${ENV_BOOST_ROOT}\n"
+            "Please ensure Boost is properly installed and set Boost_ROOT:\n"
+            "  -D Boost_ROOT=/opt/local/boost181-gcc14-ppc\n"
+            "  or export Boost_ROOT=/opt/local/boost181-gcc14-ppc")
     endif()
 endif()
 
