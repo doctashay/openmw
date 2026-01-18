@@ -620,7 +620,7 @@ if(NOT HAVE_STDINT_H)
 endif()
 
 if(OPENMW_USE_SYSTEM_OSG)
-    find_package(OpenSceneGraph 3.6.5 QUIET ${USED_OSG_COMPONENTS})  # Bump to 3.6.6 when released
+    find_package(OpenSceneGraph 3.6.5 QUIET COMPONENTS ${USED_OSG_COMPONENTS})  # Bump to 3.6.6 when released
 
     if(NOT OpenSceneGraph_FOUND)
         message(STATUS "System OpenSceneGraph not found, will build internally")
