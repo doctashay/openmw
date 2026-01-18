@@ -1939,20 +1939,9 @@ if (USE_QT)
     file(GLOB LAUNCHER_TS_FILES ${CMAKE_SOURCE_DIR}/files/lang/launcher_*.ts)
     file(GLOB WIZARD_TS_FILES ${CMAKE_SOURCE_DIR}/files/lang/wizard_*.ts)
     file(GLOB COMPONENTS_TS_FILES ${CMAKE_SOURCE_DIR}/files/lang/components_*.ts)
-    if(USE_QT4)
-        # For Qt4, find lupdate manually
-        find_program(QT_LUPDATE_EXECUTABLE lupdate PATHS ${QT_BINARY_DIR} NO_DEFAULT_PATH)
-        if(NOT QT_LUPDATE_EXECUTABLE)
-            find_program(QT_LUPDATE_EXECUTABLE lupdate)
-        endif()
-        if(NOT QT_LUPDATE_EXECUTABLE)
-            message(WARNING "lupdate not found - translation updates will not work")
-        endif()
-    else()
-        get_target_property(QT_LUPDATE_EXECUTABLE Qt::lupdate IMPORTED_LOCATION)
-        if(NOT QT_LUPDATE_EXECUTABLE)
-            message(WARNING "Qt::lupdate target not found - translation updates may not work")
-        endif()
+    get_target_property(QT_LUPDATE_EXECUTABLE Qt::lupdate IMPORTED_LOCATION)
+    if(NOT QT_LUPDATE_EXECUTABLE)
+        message(WARNING "Qt::lupdate target not found - translation updates may not work")
     endif()
     
     if(QT_LUPDATE_EXECUTABLE)
@@ -2000,47 +1989,13 @@ if (USE_QT)
             set(TS_FILES ${TS_FILES} ${WIZARD_TS_FILES})
         endif ()
 
-        if(USE_QT4)
-            # For Qt4, use lrelease instead of qt_add_translation
-            find_program(QT_LRELEASE_EXECUTABLE lrelease PATHS ${QT_BINARY_DIR} NO_DEFAULT_PATH)
-            if(NOT QT_LRELEASE_EXECUTABLE)
-                find_program(QT_LRELEASE_EXECUTABLE lrelease)
-            endif()
-            if(QT_LRELEASE_EXECUTABLE)
-                set(QM_FILES "")
-                foreach(TS_FILE ${TS_FILES})
-                    get_filename_component(TS_BASENAME ${TS_FILE} NAME_WE)
-                    set(QM_FILE "${CMAKE_CURRENT_BINARY_DIR}/${TS_BASENAME}.qm")
-                    add_custom_command(OUTPUT ${QM_FILE}
-                        COMMAND ${QT_LRELEASE_EXECUTABLE} -silent ${TS_FILE} -qm ${QM_FILE}
-                        DEPENDS ${TS_FILE}
-                        COMMENT "Generating ${TS_BASENAME}.qm")
-                    list(APPEND QM_FILES ${QM_FILE})
-                endforeach()
-            else()
-                message(WARNING "lrelease not found - translation files will not be generated")
-                set(QM_FILES "")
-            endif()
-        else()
-            qt_add_translation(QM_FILES ${TS_FILES} OPTIONS -silent)
-        endif()
+        qt_add_translation(QM_FILES ${TS_FILES} OPTIONS -silent)
 
         if (DEPLOY_QT_TRANSLATIONS)
-            if(USE_QT4)
-                # For Qt4, use qmake to query translations directory
-                if(QT_QMAKE_EXECUTABLE)
-                    execute_process(COMMAND "${QT_QMAKE_EXECUTABLE}" -query QT_INSTALL_TRANSLATIONS
-                        OUTPUT_VARIABLE QT_TRANSLATIONS_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)
-                else()
-                    message(WARNING "qmake not found - Qt translations deployment disabled")
-                    set(DEPLOY_QT_TRANSLATIONS OFF)
-                endif()
-            else()
-                # Once we set a Qt 6.2.0 as a minimum required version, we may use "qtpaths --qt-query" instead.
-                get_target_property(QT_QMAKE_EXECUTABLE Qt::qmake IMPORTED_LOCATION)
-                execute_process(COMMAND "${QT_QMAKE_EXECUTABLE}" -query QT_INSTALL_TRANSLATIONS
-                    OUTPUT_VARIABLE QT_TRANSLATIONS_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)
-            endif()
+            # Once we set a Qt 6.2.0 as a minimum required version, we may use "qtpaths --qt-query" instead.
+            get_target_property(QT_QMAKE_EXECUTABLE Qt::qmake IMPORTED_LOCATION)
+            execute_process(COMMAND "${QT_QMAKE_EXECUTABLE}" -query QT_INSTALL_TRANSLATIONS
+                OUTPUT_VARIABLE QT_TRANSLATIONS_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)
 
             foreach(QM_FILE ${QM_FILES})
                 get_filename_component(QM_BASENAME ${QM_FILE} NAME)
