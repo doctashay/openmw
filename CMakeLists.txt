@@ -705,7 +705,7 @@ if(APPLE AND (CMAKE_OSX_ARCHITECTURES MATCHES "ppc" OR OPENMW_POWERPC_BUILD))
                         "================================================================================\n"
                     )
                 else
-                    message(STATUS "✓ Boost::program_options contains PowerPC architecture")
+                    message(STATUS "Boost::program_options contains PowerPC architecture")
                 endif()
             endif()
         endif()
@@ -772,7 +772,7 @@ if(APPLE AND (CMAKE_OSX_ARCHITECTURES MATCHES "ppc" OR OPENMW_POWERPC_BUILD))
                 message(STATUS "Boost architecture: ${BOOST_ARCH_INFO}")
                 # Check if PowerPC architecture is present
                 if(BOOST_ARCH_INFO MATCHES "ppc" OR BOOST_ARCH_INFO MATCHES "powerpc")
-                    message(STATUS "✓ Boost library contains PowerPC architecture")
+                    message(STATUS "Boost library contains PowerPC architecture")
                 else
                     message(WARNING "Boost library does NOT contain PowerPC architecture!")
                     message(WARNING "  Found architectures: ${BOOST_ARCH_INFO}")
@@ -958,7 +958,7 @@ if(APPLE AND (CMAKE_OSX_ARCHITECTURES MATCHES "ppc" OR OPENMW_POWERPC_BUILD))
         endif()
         
         if(NOT ABI_MISMATCH AND NOT WORKAROUND_APPLIED)
-            message(STATUS "✓ Boost ABI compatibility check passed")
+            message(STATUS "Boost ABI compatibility check passed")
         endif()
         
         # Check if PowerPC architecture is missing (critical for PowerPC builds)
