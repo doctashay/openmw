@@ -86,7 +86,8 @@ echo ""
 echo "Building Boost libraries (this will take a while)..."
 echo ""
 
-# Create user-config.jam to ensure correct compiler settings
+# Create user-config.jam in the Boost root directory
+# This tells Boost.Build to use our specific compiler
 cat > user-config.jam <<EOF
 using gcc : : $GXX_MP14
     : <cxxflags>"-std=c++20 -mmacosx-version-min=10.5 -arch ppc -isysroot $SDK_PATH"
@@ -94,13 +95,14 @@ using gcc : : $GXX_MP14
     ;
 EOF
 
+echo "Created user-config.jam with compiler: $GXX_MP14"
+echo ""
+
 # Build with your exact settings
-# Note: Boost's b2 uses different flag names
+# The user-config.jam will be automatically picked up by b2
+# We specify toolset=gcc which will use the definition from user-config.jam
 ./b2 \
     toolset=gcc \
-    cxx="$GXX_MP14" \
-    cxxflags="-std=c++20 -mmacosx-version-min=10.5 -arch ppc -isysroot $SDK_PATH" \
-    linkflags="-mmacosx-version-min=10.5 -arch ppc -isysroot $SDK_PATH" \
     architecture=power \
     address-model=32_64 \
     --with-program_options \
