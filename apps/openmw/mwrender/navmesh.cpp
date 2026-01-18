@@ -28,7 +28,7 @@ namespace MWRender
 {
     namespace
     {
-        osg::ref_ptr<osg::StateSet> makeDebugDrawStateSet()
+        static osg::ref_ptr<osg::StateSet> makeDebugDrawStateSet()
         {
             const osg::ref_ptr<osg::LineWidth> lineWidth = new osg::LineWidth();
 
