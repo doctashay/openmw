@@ -687,25 +687,20 @@ if(APPLE AND (CMAKE_OSX_ARCHITECTURES MATCHES "ppc" OR OPENMW_POWERPC_BUILD))
                 ERROR_QUIET
             )
             if(BOOST_PO_ARCH_INFO)
-                if(NOT (BOOST_PO_ARCH_INFO MATCHES "ppc" OR BOOST_PO_ARCH_INFO MATCHES "powerpc"))
-                    message(FATAL_ERROR "\n"
-                        "================================================================================\n"
+                string(FIND "${BOOST_PO_ARCH_INFO}" "ppc" PPC_POS)
+                string(FIND "${BOOST_PO_ARCH_INFO}" "powerpc" POWERPC_POS)
+                if(PPC_POS EQUAL -1 AND POWERPC_POS EQUAL -1)
+                    message(FATAL_ERROR
                         "BOOST PROGRAM_OPTIONS MISSING POWERPC ARCHITECTURE\n"
-                        "================================================================================\n"
-                        "The Boost::program_options library does not contain PowerPC architecture.\n"
+                        "The Boost program_options library does not contain PowerPC architecture.\n"
                         "Library: ${BOOST_PO_LOCATION}\n"
                         "Architectures found: ${BOOST_PO_ARCH_INFO}\n"
-                        "\n"
-                        "This will cause linker errors: 'Undefined symbols for architecture ppc'.\n"
-                        "\n"
-                        "SOLUTION: Rebuild Boost for PowerPC:\n"
-                        "  ./build_boost_ppc.sh\n"
-                        "  export Boost_ROOT=/opt/local/boost-gcc14-ppc\n"
-                        "  # Then rerun CMake\n"
-                        "================================================================================\n"
+                        "This will cause linker errors: Undefined symbols for architecture ppc.\n"
+                        "SOLUTION: Rebuild Boost for PowerPC using build_boost181_ppc.sh\n"
+                        "Then set: export Boost_ROOT=/opt/local/boost181-gcc14-ppc"
                     )
-                else
-                    message(STATUS "Boost::program_options contains PowerPC architecture")
+                else()
+                    message(STATUS "Boost program_options contains PowerPC architecture")
                 endif()
             endif()
         endif()
