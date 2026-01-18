@@ -672,54 +672,185 @@ endif()
 if(NOT TARGET Boost::program_options)
     add_library(Boost::program_options IMPORTED UNKNOWN)
     set(BOOST_PO_FOUND FALSE)
+    set(BOOST_PO_LIB "")
+    
+    # Try component-specific variables first
     if(Boost_PROGRAM_OPTIONS_LIBRARY_RELEASE)
         set_target_properties(Boost::program_options PROPERTIES
             IMPORTED_LOCATION_RELEASE "${Boost_PROGRAM_OPTIONS_LIBRARY_RELEASE}")
         set(BOOST_PO_FOUND TRUE)
+        set(BOOST_PO_LIB "${Boost_PROGRAM_OPTIONS_LIBRARY_RELEASE}")
     endif()
     if(Boost_PROGRAM_OPTIONS_LIBRARY_DEBUG)
         set_target_properties(Boost::program_options PROPERTIES
             IMPORTED_LOCATION_DEBUG "${Boost_PROGRAM_OPTIONS_LIBRARY_DEBUG}")
         set(BOOST_PO_FOUND TRUE)
+        if(NOT BOOST_PO_LIB)
+            set(BOOST_PO_LIB "${Boost_PROGRAM_OPTIONS_LIBRARY_DEBUG}")
+        endif()
     endif()
     if(Boost_PROGRAM_OPTIONS_LIBRARY)
         set_target_properties(Boost::program_options PROPERTIES
             IMPORTED_LOCATION "${Boost_PROGRAM_OPTIONS_LIBRARY}")
         set(BOOST_PO_FOUND TRUE)
+        if(NOT BOOST_PO_LIB)
+            set(BOOST_PO_LIB "${Boost_PROGRAM_OPTIONS_LIBRARY}")
+        endif()
     endif()
+    
+    # Fallback: Extract from Boost_LIBRARIES
+    if(NOT BOOST_PO_FOUND AND Boost_LIBRARIES)
+        foreach(lib ${Boost_LIBRARIES})
+            # Skip generator expressions and keywords
+            if(lib MATCHES "program_options" AND NOT lib MATCHES "^(optimized|debug|general)$")
+                # Remove generator expression keywords
+                string(REGEX REPLACE "^(optimized|debug);" "" clean_lib "${lib}")
+                if(EXISTS "${clean_lib}")
+                    set_target_properties(Boost::program_options PROPERTIES
+                        IMPORTED_LOCATION "${clean_lib}")
+                    set(BOOST_PO_FOUND TRUE)
+                    set(BOOST_PO_LIB "${clean_lib}")
+                    break()
+                endif()
+            endif()
+        endforeach()
+    endif()
+    
+    # Fallback: Construct path from Boost_LIBRARY_DIRS
+    if(NOT BOOST_PO_FOUND AND Boost_LIBRARY_DIRS)
+        # Try shared library first (since Boost_USE_STATIC_LIBS is OFF)
+        find_library(BOOST_PO_LIB_TMP
+            NAMES boost_program_options
+            PATHS ${Boost_LIBRARY_DIRS}
+            NO_DEFAULT_PATH
+        )
+        if(BOOST_PO_LIB_TMP)
+            set_target_properties(Boost::program_options PROPERTIES
+                IMPORTED_LOCATION "${BOOST_PO_LIB_TMP}")
+            set(BOOST_PO_FOUND TRUE)
+            set(BOOST_PO_LIB "${BOOST_PO_LIB_TMP}")
+        endif()
+    endif()
+    
+    # Fallback: Use Boost_ROOT if set
+    if(NOT BOOST_PO_FOUND AND Boost_ROOT)
+        find_library(BOOST_PO_LIB_TMP
+            NAMES boost_program_options
+            PATHS "${Boost_ROOT}/lib"
+            NO_DEFAULT_PATH
+        )
+        if(BOOST_PO_LIB_TMP)
+            set_target_properties(Boost::program_options PROPERTIES
+                IMPORTED_LOCATION "${BOOST_PO_LIB_TMP}")
+            set(BOOST_PO_FOUND TRUE)
+            set(BOOST_PO_LIB "${BOOST_PO_LIB_TMP}")
+        endif()
+    endif()
+    
     if(Boost_INCLUDE_DIRS)
         set_target_properties(Boost::program_options PROPERTIES
             INTERFACE_INCLUDE_DIRECTORIES "${Boost_INCLUDE_DIRS}")
     endif()
+    
     if(NOT BOOST_PO_FOUND)
-        message(FATAL_ERROR "Boost::program_options library not found. Boost_PROGRAM_OPTIONS_LIBRARY is not set. Please ensure Boost is properly installed and Boost_ROOT is set correctly.")
+        message(FATAL_ERROR 
+            "Boost::program_options library not found.\n"
+            "Boost_PROGRAM_OPTIONS_LIBRARY: ${Boost_PROGRAM_OPTIONS_LIBRARY}\n"
+            "Boost_LIBRARIES: ${Boost_LIBRARIES}\n"
+            "Boost_LIBRARY_DIRS: ${Boost_LIBRARY_DIRS}\n"
+            "Boost_ROOT: ${Boost_ROOT}\n"
+            "Please ensure Boost is properly installed and Boost_ROOT is set correctly.")
     endif()
 endif()
 
 if(NOT TARGET Boost::iostreams)
     add_library(Boost::iostreams IMPORTED UNKNOWN)
     set(BOOST_IOSTREAMS_FOUND FALSE)
+    set(BOOST_IOSTREAMS_LIB "")
+    
+    # Try component-specific variables first
     if(Boost_IOSTREAMS_LIBRARY_RELEASE)
         set_target_properties(Boost::iostreams PROPERTIES
             IMPORTED_LOCATION_RELEASE "${Boost_IOSTREAMS_LIBRARY_RELEASE}")
         set(BOOST_IOSTREAMS_FOUND TRUE)
+        set(BOOST_IOSTREAMS_LIB "${Boost_IOSTREAMS_LIBRARY_RELEASE}")
     endif()
     if(Boost_IOSTREAMS_LIBRARY_DEBUG)
         set_target_properties(Boost::iostreams PROPERTIES
             IMPORTED_LOCATION_DEBUG "${Boost_IOSTREAMS_LIBRARY_DEBUG}")
         set(BOOST_IOSTREAMS_FOUND TRUE)
+        if(NOT BOOST_IOSTREAMS_LIB)
+            set(BOOST_IOSTREAMS_LIB "${Boost_IOSTREAMS_LIBRARY_DEBUG}")
+        endif()
     endif()
     if(Boost_IOSTREAMS_LIBRARY)
         set_target_properties(Boost::iostreams PROPERTIES
             IMPORTED_LOCATION "${Boost_IOSTREAMS_LIBRARY}")
         set(BOOST_IOSTREAMS_FOUND TRUE)
+        if(NOT BOOST_IOSTREAMS_LIB)
+            set(BOOST_IOSTREAMS_LIB "${Boost_IOSTREAMS_LIBRARY}")
+        endif()
     endif()
+    
+    # Fallback: Extract from Boost_LIBRARIES
+    if(NOT BOOST_IOSTREAMS_FOUND AND Boost_LIBRARIES)
+        foreach(lib ${Boost_LIBRARIES})
+            if(lib MATCHES "iostreams" AND NOT lib MATCHES "^(optimized|debug|general)$")
+                string(REGEX REPLACE "^(optimized|debug);" "" clean_lib "${lib}")
+                if(EXISTS "${clean_lib}")
+                    set_target_properties(Boost::iostreams PROPERTIES
+                        IMPORTED_LOCATION "${clean_lib}")
+                    set(BOOST_IOSTREAMS_FOUND TRUE)
+                    set(BOOST_IOSTREAMS_LIB "${clean_lib}")
+                    break()
+                endif()
+            endif()
+        endforeach()
+    endif()
+    
+    # Fallback: Construct path from Boost_LIBRARY_DIRS
+    if(NOT BOOST_IOSTREAMS_FOUND AND Boost_LIBRARY_DIRS)
+        find_library(BOOST_IOSTREAMS_LIB_TMP
+            NAMES boost_iostreams
+            PATHS ${Boost_LIBRARY_DIRS}
+            NO_DEFAULT_PATH
+        )
+        if(BOOST_IOSTREAMS_LIB_TMP)
+            set_target_properties(Boost::iostreams PROPERTIES
+                IMPORTED_LOCATION "${BOOST_IOSTREAMS_LIB_TMP}")
+            set(BOOST_IOSTREAMS_FOUND TRUE)
+            set(BOOST_IOSTREAMS_LIB "${BOOST_IOSTREAMS_LIB_TMP}")
+        endif()
+    endif()
+    
+    # Fallback: Use Boost_ROOT if set
+    if(NOT BOOST_IOSTREAMS_FOUND AND Boost_ROOT)
+        find_library(BOOST_IOSTREAMS_LIB_TMP
+            NAMES boost_iostreams
+            PATHS "${Boost_ROOT}/lib"
+            NO_DEFAULT_PATH
+        )
+        if(BOOST_IOSTREAMS_LIB_TMP)
+            set_target_properties(Boost::iostreams PROPERTIES
+                IMPORTED_LOCATION "${BOOST_IOSTREAMS_LIB_TMP}")
+            set(BOOST_IOSTREAMS_FOUND TRUE)
+            set(BOOST_IOSTREAMS_LIB "${BOOST_IOSTREAMS_LIB_TMP}")
+        endif()
+    endif()
+    
     if(Boost_INCLUDE_DIRS)
         set_target_properties(Boost::iostreams PROPERTIES
             INTERFACE_INCLUDE_DIRECTORIES "${Boost_INCLUDE_DIRS}")
     endif()
+    
     if(NOT BOOST_IOSTREAMS_FOUND)
-        message(FATAL_ERROR "Boost::iostreams library not found. Boost_IOSTREAMS_LIBRARY is not set. Please ensure Boost is properly installed and Boost_ROOT is set correctly.")
+        message(FATAL_ERROR 
+            "Boost::iostreams library not found.\n"
+            "Boost_IOSTREAMS_LIBRARY: ${Boost_IOSTREAMS_LIBRARY}\n"
+            "Boost_LIBRARIES: ${Boost_LIBRARIES}\n"
+            "Boost_LIBRARY_DIRS: ${Boost_LIBRARY_DIRS}\n"
+            "Boost_ROOT: ${Boost_ROOT}\n"
+            "Please ensure Boost is properly installed and Boost_ROOT is set correctly.")
     endif()
 endif()
 
