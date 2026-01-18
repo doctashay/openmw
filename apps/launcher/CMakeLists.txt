@@ -72,11 +72,7 @@ target_link_libraries(openmw-launcher
     components_qt
 )
 
-if(USE_QT4)
-    target_link_libraries(openmw-launcher ${QT_QTCORE_LIBRARY} ${QT_QTGUI_LIBRARY} ${QT_QTSVG_LIBRARY})
-else()
-    target_link_libraries(openmw-launcher Qt::Widgets Qt::Core Qt::Svg)
-endif()
+target_link_libraries(openmw-launcher Qt::Widgets Qt::Core Qt::Svg)
 
 if (WIN32)
     target_sources(openmw-launcher PRIVATE ${CMAKE_SOURCE_DIR}/files/windows/other-apps.manifest)
