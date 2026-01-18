@@ -40,6 +40,27 @@ echo ""
 export CC="$GCC_MP14"
 export CXX="$GXX_MP14"
 
+# Check for Boost_ROOT
+if [ -z "$Boost_ROOT" ]; then
+    # Try common locations
+    if [ -d "/opt/local/boost181-gcc14-ppc" ]; then
+        export Boost_ROOT="/opt/local/boost181-gcc14-ppc"
+        echo "Auto-detected Boost_ROOT: $Boost_ROOT"
+    elif [ -d "/opt/local/boost-gcc14-ppc" ]; then
+        export Boost_ROOT="/opt/local/boost-gcc14-ppc"
+        echo "Auto-detected Boost_ROOT: $Boost_ROOT"
+    else
+        echo "WARNING: Boost_ROOT not set and not found in common locations"
+        echo "Set Boost_ROOT environment variable or pass -D Boost_ROOT=/path/to/boost to CMake"
+    fi
+else
+    echo "Using Boost_ROOT from environment: $Boost_ROOT"
+    if [ ! -d "$Boost_ROOT" ]; then
+        echo "WARNING: Boost_ROOT is set but directory doesn't exist: $Boost_ROOT"
+    fi
+fi
+echo ""
+
 # Clean and create build directory
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
@@ -84,6 +105,11 @@ CMAKE_ARGS=(
     -D OPENMW_USE_SYSTEM_ICU=ON
     -D OPENMW_LTO_BUILD=OFF
 )
+
+# Add Boost_ROOT if set
+if [ -n "$Boost_ROOT" ]; then
+    CMAKE_ARGS+=(-D Boost_ROOT="$Boost_ROOT")
+fi
 
 # Add ccache if available (speeds up rebuilds significantly)
 if command -v ccache &> /dev/null; then

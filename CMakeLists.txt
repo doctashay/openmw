@@ -674,6 +674,19 @@ if(NOT Boost_FOUND)
     message(FATAL_ERROR "Boost 1.70.0 or later is required. Please install Boost via MacPorts:\n  sudo port install boost\nOr set Boost_ROOT to the Boost installation directory.")
 endif()
 
+# If Boost_ROOT is set but Boost_LIBRARY_DIRS/Boost_INCLUDE_DIRS are empty,
+# manually set them (this happens when Boost doesn't have CMake config files)
+if(Boost_ROOT)
+    if(NOT Boost_LIBRARY_DIRS AND EXISTS "${Boost_ROOT}/lib")
+        set(Boost_LIBRARY_DIRS "${Boost_ROOT}/lib")
+        message(STATUS "Manually setting Boost_LIBRARY_DIRS: ${Boost_LIBRARY_DIRS}")
+    endif()
+    if(NOT Boost_INCLUDE_DIRS AND EXISTS "${Boost_ROOT}/include")
+        set(Boost_INCLUDE_DIRS "${Boost_ROOT}/include")
+        message(STATUS "Manually setting Boost_INCLUDE_DIRS: ${Boost_INCLUDE_DIRS}")
+    endif()
+endif()
+
 # Debug output
 message(STATUS "Boost found: ${Boost_FOUND}")
 message(STATUS "Boost_VERSION: ${Boost_VERSION}")
