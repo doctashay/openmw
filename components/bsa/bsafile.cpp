@@ -28,6 +28,23 @@
 #include <cerrno>
 #include <cstring>
 #include <filesystem>
+
+namespace
+{
+    // Helper function for safe aligned reading on PowerPC
+    // PowerPC requires aligned memory access, so we read into a char buffer
+    // first, then memcpy to the aligned variable
+    template<typename T>
+    void readAligned(std::istream& in, T& value)
+    {
+        static_assert(std::is_arithmetic_v<T>);
+        alignas(T) char buffer[sizeof(T)];
+        in.read(buffer, sizeof(T));
+        if (in.fail())
+            return;
+        std::memcpy(&value, buffer, sizeof(T));
+    }
+}
 #include <format>
 #include <fstream>
 #include <istream>
@@ -122,7 +139,10 @@ void BSAFile::readHeader(std::istream& input)
         // First 12 bytes
         uint32_t head[3];
 
-        input.read(reinterpret_cast<char*>(head), 12);
+        // Use safe aligned reading for PowerPC compatibility
+        readAligned(input, head[0]);
+        readAligned(input, head[1]);
+        readAligned(input, head[2]);
 
         if (input.fail())
             fail(std::format("Failed to read head: {}", std::generic_category().message(errno)));
@@ -153,11 +173,16 @@ void BSAFile::readHeader(std::istream& input)
         fail("Directory information larger than entire archive");
 
     // Read the offset info into a temporary buffer
+    // Use safe aligned reading - read into char buffer first, then memcpy
     std::vector<uint32_t> offsets(3 * filenum);
-    input.read(reinterpret_cast<char*>(offsets.data()), 12 * filenum);
+    alignas(uint32_t) std::vector<char> offsetBuffer(12 * filenum);
+    input.read(offsetBuffer.data(), 12 * filenum);
 
     if (input.fail())
         fail(std::format("Failed to read offsets: {}", std::generic_category().message(errno)));
+
+    // Copy to aligned vector using memcpy (safe for unaligned source)
+    std::memcpy(offsets.data(), offsetBuffer.data(), 12 * filenum);
 
     // BSA files are little-endian, convert on big-endian systems
     if constexpr (Misc::IS_BIG_ENDIAN)
@@ -177,10 +202,16 @@ void BSAFile::readHeader(std::istream& input)
     assert(input.tellg() == std::streampos(12 + dirsize));
     std::vector<Hash> hashes(filenum);
     static_assert(sizeof(Hash) == 8);
-    input.read(reinterpret_cast<char*>(hashes.data()), 8 * filenum);
+    
+    // Use safe aligned reading for PowerPC compatibility
+    alignas(Hash) std::vector<char> hashBuffer(8 * filenum);
+    input.read(hashBuffer.data(), 8 * filenum);
 
     if (input.fail())
         fail(std::format("Failed to read hashes: {}", std::generic_category().message(errno)));
+
+    // Copy to aligned vector using memcpy (safe for unaligned source)
+    std::memcpy(hashes.data(), hashBuffer.data(), 8 * filenum);
 
     // Hash values are little-endian, convert on big-endian systems
     if constexpr (Misc::IS_BIG_ENDIAN)

@@ -18,6 +18,18 @@ if(OPENMW_ATOMIC_LIB)
     target_link_libraries(bsatool ${OPENMW_ATOMIC_LIB})
 endif()
 
+# PowerPC alignment workaround for Boost program_options
+# The malloc_alignment_fix.cpp in components should handle this,
+# but we ensure it's linked early by linking components first
+if(APPLE AND (CMAKE_OSX_ARCHITECTURES MATCHES "ppc" OR OPENMW_POWERPC_BUILD))
+    message(STATUS "bsatool: PowerPC build detected - using malloc alignment fix from components")
+    # Ensure our malloc wrapper takes precedence by using linker flags
+    # This makes our malloc/free override Boost's calls
+    set_target_properties(bsatool PROPERTIES
+        LINK_FLAGS "-Wl,-flat_namespace"
+    )
+endif()
+
 # On macOS, add Boost library directory to rpath so executable can find dylibs at runtime
 if(APPLE)
     set(BOOST_RPATH_DIRS "")

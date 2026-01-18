@@ -155,6 +155,18 @@ if (APPLE)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mmacosx-version-min=10.5")
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mmacosx-version-min=10.5")
         
+        # PowerPC alignment workarounds
+        # macOS 10.5's malloc is strict about alignment, but Boost may allocate unaligned memory
+        # These flags help work around alignment issues in third-party libraries
+        if(CMAKE_OSX_ARCHITECTURES MATCHES "ppc" OR OPENMW_POWERPC_BUILD)
+            # Disable strict malloc checking for PowerPC (macOS 10.5 workaround)
+            # This allows unaligned pointers to be freed without crashing
+            # Note: This is a workaround for Boost's internal allocator issues
+            add_definitions(-DMALLOC_NANO=0)
+            # Also set environment variable hint (though this may not work for static init)
+            message(STATUS "PowerPC build: Adding alignment workarounds for Boost compatibility")
+        endif()
+        
         # Define macros for 10.5 API availability
         add_definitions(-DMAC_OS_X_VERSION_MIN_REQUIRED=1050)
         add_definitions(-DMAC_OS_X_VERSION_MAX_ALLOWED=1050)

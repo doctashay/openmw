@@ -17,6 +17,23 @@
 #include "ba2file.hpp"
 #include "memorystream.hpp"
 
+namespace
+{
+    // Helper function for safe aligned reading on PowerPC
+    // PowerPC requires aligned memory access, so we read into a char buffer
+    // first, then memcpy to the aligned variable
+    template<typename T>
+    void readAligned(std::istream& in, T& value)
+    {
+        static_assert(std::is_arithmetic_v<T>);
+        alignas(T) char buffer[sizeof(T)];
+        in.read(buffer, sizeof(T));
+        if (in.fail())
+            return;
+        std::memcpy(&value, buffer, sizeof(T));
+    }
+}
+
 namespace Bsa
 {
     BA2DX10File::BA2DX10File() {}
@@ -30,9 +47,9 @@ namespace Bsa
         for (uint32_t i = 0; i < fileCount; ++i)
         {
             uint32_t nameHash, extHash, dirHash;
-            in.read(reinterpret_cast<char*>(&nameHash), sizeof(uint32_t));
-            in.read(reinterpret_cast<char*>(&extHash), sizeof(uint32_t));
-            in.read(reinterpret_cast<char*>(&dirHash), sizeof(uint32_t));
+            readAligned(in, nameHash);
+            readAligned(in, extHash);
+            readAligned(in, dirHash);
             // BA2 files are little-endian, convert on big-endian systems
             if constexpr (Misc::IS_BIG_ENDIAN)
             {
@@ -43,26 +60,26 @@ namespace Bsa
 
             FileRecord file;
             uint8_t unknown;
-            in.read(reinterpret_cast<char*>(&unknown), sizeof(uint8_t));
+            readAligned(in, unknown);
 
             uint8_t nbChunks;
-            in.read(reinterpret_cast<char*>(&nbChunks), sizeof(uint8_t));
+            readAligned(in, nbChunks);
 
             file.texturesChunks.resize(nbChunks);
 
             uint16_t chunkHeaderSize;
-            in.read(reinterpret_cast<char*>(&chunkHeaderSize), sizeof(uint16_t));
+            readAligned(in, chunkHeaderSize);
             // BA2 files are little-endian, convert on big-endian systems
             if constexpr (Misc::IS_BIG_ENDIAN)
                 chunkHeaderSize = Misc::fromLittleEndian(chunkHeaderSize);
             if (chunkHeaderSize != 24)
                 fail("Corrupted BSA");
 
-            in.read(reinterpret_cast<char*>(&file.height), sizeof(uint16_t));
-            in.read(reinterpret_cast<char*>(&file.width), sizeof(uint16_t));
-            in.read(reinterpret_cast<char*>(&file.numMips), sizeof(uint8_t));
-            in.read(reinterpret_cast<char*>(&file.DXGIFormat), sizeof(uint8_t));
-            in.read(reinterpret_cast<char*>(&file.cubeMaps), sizeof(uint16_t));
+            readAligned(in, file.height);
+            readAligned(in, file.width);
+            readAligned(in, file.numMips);
+            readAligned(in, file.DXGIFormat);
+            readAligned(in, file.cubeMaps);
             // BA2 files are little-endian, convert on big-endian systems
             if constexpr (Misc::IS_BIG_ENDIAN)
             {
@@ -72,13 +89,13 @@ namespace Bsa
             }
             for (auto& texture : file.texturesChunks)
             {
-                in.read(reinterpret_cast<char*>(&texture.offset), sizeof(int64_t));
-                in.read(reinterpret_cast<char*>(&texture.packedSize), sizeof(uint32_t));
-                in.read(reinterpret_cast<char*>(&texture.size), sizeof(uint32_t));
-                in.read(reinterpret_cast<char*>(&texture.startMip), sizeof(uint16_t));
-                in.read(reinterpret_cast<char*>(&texture.endMip), sizeof(uint16_t));
+                readAligned(in, texture.offset);
+                readAligned(in, texture.packedSize);
+                readAligned(in, texture.size);
+                readAligned(in, texture.startMip);
+                readAligned(in, texture.endMip);
                 uint32_t baadfood;
-                in.read(reinterpret_cast<char*>(&baadfood), sizeof(uint32_t));
+                readAligned(in, baadfood);
                 // BA2 files are little-endian, convert on big-endian systems
                 if constexpr (Misc::IS_BIG_ENDIAN)
                 {
@@ -115,8 +132,10 @@ namespace Bsa
         uint64_t fileTableOffset;
         {
             uint32_t header[4];
-            input.read(reinterpret_cast<char*>(header), 16);
-            input.read(reinterpret_cast<char*>(&fileTableOffset), 8);
+            alignas(uint32_t) char headerBuffer[16];
+            input.read(headerBuffer, 16);
+            std::memcpy(header, headerBuffer, 16);
+            readAligned(input, fileTableOffset);
 
             // BA2 files are little-endian, convert on big-endian systems
             if constexpr (Misc::IS_BIG_ENDIAN)
@@ -139,9 +158,9 @@ namespace Bsa
                     break;
                 case BA2Version::StarfieldDDS:
                     uint64_t dummy;
-                    input.read(reinterpret_cast<char*>(&dummy), 8);
+                    readAligned(input, dummy);
                     uint32_t compressionMethod;
-                    input.read(reinterpret_cast<char*>(&compressionMethod), 4);
+                    readAligned(input, compressionMethod);
                     // BA2 files are little-endian, convert on big-endian systems
                     if constexpr (Misc::IS_BIG_ENDIAN)
                     {
@@ -170,7 +189,7 @@ namespace Bsa
         {
             std::vector<char> fileName;
             uint16_t fileNameSize;
-            input.read(reinterpret_cast<char*>(&fileNameSize), sizeof(uint16_t));
+            readAligned(input, fileNameSize);
             // BA2 files are little-endian, convert on big-endian systems
             if constexpr (Misc::IS_BIG_ENDIAN)
                 fileNameSize = Misc::fromLittleEndian(fileNameSize);
