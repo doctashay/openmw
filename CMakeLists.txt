@@ -781,7 +781,7 @@ if(APPLE AND (CMAKE_OSX_ARCHITECTURES MATCHES "ppc" OR OPENMW_POWERPC_BUILD))
                 else()
                     message(STATUS "Boost library contains PowerPC architecture")
                 endif()
-            else
+            else()
                 message(WARNING "Could not determine Boost library architecture")
             endif()
             
