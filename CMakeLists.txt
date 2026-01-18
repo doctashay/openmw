@@ -668,6 +668,50 @@ if(NOT Boost_FOUND)
     message(FATAL_ERROR "Boost 1.70.0 or later is required. Please install Boost via MacPorts:\n  sudo port install boost\nOr set Boost_ROOT to the Boost installation directory.")
 endif()
 
+# For PowerPC builds, verify program_options library has PowerPC architecture
+if(APPLE AND (CMAKE_OSX_ARCHITECTURES MATCHES "ppc" OR OPENMW_POWERPC_BUILD))
+    # Try to find the actual program_options library file
+    if(TARGET Boost::program_options)
+        get_target_property(BOOST_PO_LOCATION Boost::program_options LOCATION)
+        if(BOOST_PO_LOCATION STREQUAL "BOOST_PO_LOCATION-NOTFOUND")
+            # Try alternative method
+            get_target_property(BOOST_PO_IMPORTED_LOCATION Boost::program_options IMPORTED_LOCATION)
+            if(NOT BOOST_PO_IMPORTED_LOCATION STREQUAL "BOOST_PO_IMPORTED_LOCATION-NOTFOUND")
+                set(BOOST_PO_LOCATION "${BOOST_PO_IMPORTED_LOCATION}")
+            endif()
+        endif()
+        if(BOOST_PO_LOCATION AND EXISTS "${BOOST_PO_LOCATION}")
+            execute_process(
+                COMMAND lipo -info "${BOOST_PO_LOCATION}"
+                OUTPUT_VARIABLE BOOST_PO_ARCH_INFO
+                ERROR_QUIET
+            )
+            if(BOOST_PO_ARCH_INFO)
+                if(NOT (BOOST_PO_ARCH_INFO MATCHES "ppc" OR BOOST_PO_ARCH_INFO MATCHES "powerpc"))
+                    message(FATAL_ERROR "\n"
+                        "================================================================================\n"
+                        "BOOST PROGRAM_OPTIONS MISSING POWERPC ARCHITECTURE\n"
+                        "================================================================================\n"
+                        "The Boost::program_options library does not contain PowerPC architecture.\n"
+                        "Library: ${BOOST_PO_LOCATION}\n"
+                        "Architectures found: ${BOOST_PO_ARCH_INFO}\n"
+                        "\n"
+                        "This will cause linker errors: 'Undefined symbols for architecture ppc'.\n"
+                        "\n"
+                        "SOLUTION: Rebuild Boost for PowerPC:\n"
+                        "  ./build_boost_ppc.sh\n"
+                        "  export Boost_ROOT=/opt/local/boost-gcc14-ppc\n"
+                        "  # Then rerun CMake\n"
+                        "================================================================================\n"
+                    )
+                else
+                    message(STATUS "✓ Boost::program_options contains PowerPC architecture")
+                endif()
+            endif()
+        endif()
+    endif()
+endif()
+
 # Check Boost ABI compatibility for PowerPC/macOS 10.5
 # MacPorts Boost may be built with Clang/libc++, but we're using GCC/libstdc++
 # IMPORTANT: MacPorts must be configured with 'cxx_stdlib libstdc++' in macports.conf
@@ -726,6 +770,18 @@ if(APPLE AND (CMAKE_OSX_ARCHITECTURES MATCHES "ppc" OR OPENMW_POWERPC_BUILD))
             )
             if(BOOST_ARCH_INFO)
                 message(STATUS "Boost architecture: ${BOOST_ARCH_INFO}")
+                # Check if PowerPC architecture is present
+                if(BOOST_ARCH_INFO MATCHES "ppc" OR BOOST_ARCH_INFO MATCHES "powerpc")
+                    message(STATUS "✓ Boost library contains PowerPC architecture")
+                else
+                    message(WARNING "Boost library does NOT contain PowerPC architecture!")
+                    message(WARNING "  Found architectures: ${BOOST_ARCH_INFO}")
+                    message(WARNING "  This will cause linker errors for PowerPC builds.")
+                    message(WARNING "  Solution: Rebuild Boost for PowerPC using build_boost_ppc.sh")
+                    set(BOOST_MISSING_PPC TRUE)
+                endif()
+            else
+                message(WARNING "Could not determine Boost library architecture")
             endif()
             
             # Use otool -L to check linked standard library
@@ -903,6 +959,33 @@ if(APPLE AND (CMAKE_OSX_ARCHITECTURES MATCHES "ppc" OR OPENMW_POWERPC_BUILD))
         
         if(NOT ABI_MISMATCH AND NOT WORKAROUND_APPLIED)
             message(STATUS "✓ Boost ABI compatibility check passed")
+        endif()
+        
+        # Check if PowerPC architecture is missing (critical for PowerPC builds)
+        if(BOOST_MISSING_PPC)
+            message(FATAL_ERROR "\n"
+                "================================================================================\n"
+                "BOOST MISSING POWERPC ARCHITECTURE - BUILD CANNOT PROCEED\n"
+                "================================================================================\n"
+                "The Boost libraries found do not contain PowerPC architecture slices.\n"
+                "This will cause linker errors with 'Undefined symbols for architecture ppc'.\n"
+                "\n"
+                "SOLUTION: Rebuild Boost for PowerPC:\n"
+                "\n"
+                "Option 1: Use the provided build script (recommended):\n"
+                "  ./build_boost_ppc.sh\n"
+                "  export Boost_ROOT=/opt/local/boost-gcc14-ppc\n"
+                "  # Then rerun CMake\n"
+                "\n"
+                "Option 2: Manual MacPorts build:\n"
+                "  sudo port install boost176 compiler=gcc-14\n"
+                "  # Ensure MacPorts is configured with 'cxx_stdlib libstdc++' in macports.conf\n"
+                "\n"
+                "To verify Boost has PowerPC support, run:\n"
+                "  lipo -info ${FIRST_BOOST_LIB}\n"
+                "  # Should show 'ppc' or 'powerpc' in the output\n"
+                "================================================================================\n"
+            )
         endif()
     else()
         message(WARNING "Could not fully analyze Boost ABI - proceeding with caution")
