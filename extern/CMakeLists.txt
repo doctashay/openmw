@@ -247,24 +247,75 @@ if(NOT OPENMW_USE_SYSTEM_OSG)
         endif()
 
         # Patch 3: DarwinUtils.mm - CGDisplayMode APIs were introduced in macOS 10.6
-        # These APIs are not available on macOS 10.5, so we stub out the function
+        # These APIs are not available on macOS 10.5, so we wrap all usage in version checks
         set(OSG_DARWIN_FILE "${osg_SOURCE_DIR}/src/osgViewer/DarwinUtils.mm")
         if(EXISTS "${OSG_DARWIN_FILE}")
             file(READ "${OSG_DARWIN_FILE}" OSG_DARWIN_CONTENT)
-            # Add early return at the start of findBestDisplayModeFor for macOS 10.5
-            # Replace in order of appearance in the file
-            # First, handle the first API call (line 165)
+            
+            # Wrap the entire function body that uses CGDisplayMode APIs
+            # Start by adding early return and wrapping the first API call
             string(REPLACE 
                 "CFArrayRef availableModes = CGDisplayCopyAllDisplayModes (displayid, NULL);"
-                "#if MAC_OS_X_VERSION_MIN_REQUIRED >= 1060\n        CFArrayRef availableModes = CGDisplayCopyAllDisplayModes (displayid, NULL);\n#else\n        // CGDisplayMode APIs not available on macOS 10.5 - return early\n        return false;\n#endif"
+                "#if MAC_OS_X_VERSION_MIN_REQUIRED >= 1060\n        CFArrayRef availableModes = CGDisplayCopyAllDisplayModes (displayid, NULL);\n#else\n        // CGDisplayMode APIs not available on macOS 10.5\n        return false;\n#endif"
                 OSG_DARWIN_CONTENT "${OSG_DARWIN_CONTENT}")
-            # Then handle the CGDisplayModeRef type declaration (line 168)
+            
+            # Wrap CGDisplayModeRef variable declaration
+            # Since we return early on 10.5, this code won't execute, but compiler still needs to parse it
             string(REPLACE 
                 "CGDisplayModeRef best_match(NULL);"
-                "#if MAC_OS_X_VERSION_MIN_REQUIRED >= 1060\n        CGDisplayModeRef best_match(NULL);\n#else\n        // Already returned above for 10.5\n#endif"
+                "#if MAC_OS_X_VERSION_MIN_REQUIRED >= 1060\n        CGDisplayModeRef best_match(NULL);\n#else\n        // CGDisplayModeRef not available on 10.5 - function returns early above\n        void* best_match = NULL;\n#endif"
                 OSG_DARWIN_CONTENT "${OSG_DARWIN_CONTENT}")
+            
+            # Wrap CGDisplayModeRef type usage in loop
+            string(REPLACE 
+                "CGDisplayModeRef mode = (CGDisplayModeRef) CFArrayGetValueAtIndex (availableModes, i);"
+                "#if MAC_OS_X_VERSION_MIN_REQUIRED >= 1060\n        CGDisplayModeRef mode = (CGDisplayModeRef) CFArrayGetValueAtIndex (availableModes, i);\n#else\n        // Not reached due to early return\n        void* mode = NULL;\n        (void)mode;\n        continue;\n#endif"
+                OSG_DARWIN_CONTENT "${OSG_DARWIN_CONTENT}")
+            
+            # Wrap CGDisplayModeGetWidth
+            string(REPLACE 
+                "int w = CGDisplayModeGetWidth(mode);"
+                "#if MAC_OS_X_VERSION_MIN_REQUIRED >= 1060\n        int w = CGDisplayModeGetWidth(mode);\n#else\n        continue;\n#endif"
+                OSG_DARWIN_CONTENT "${OSG_DARWIN_CONTENT}")
+            
+            # Wrap CGDisplayModeGetHeight
+            string(REPLACE 
+                "int h = CGDisplayModeGetHeight(mode);"
+                "#if MAC_OS_X_VERSION_MIN_REQUIRED >= 1060\n        int h = CGDisplayModeGetHeight(mode);\n#else\n        continue;\n#endif"
+                OSG_DARWIN_CONTENT "${OSG_DARWIN_CONTENT}")
+            
+            # Wrap displayBitsPerPixelForMode
+            string(REPLACE 
+                "unsigned int color_depth = displayBitsPerPixelForMode(mode);"
+                "#if MAC_OS_X_VERSION_MIN_REQUIRED >= 1060\n        unsigned int color_depth = displayBitsPerPixelForMode(mode);\n#else\n        continue;\n#endif"
+                OSG_DARWIN_CONTENT "${OSG_DARWIN_CONTENT}")
+            
+            # Wrap CGDisplayModeGetRefreshRate
+            string(REPLACE 
+                "double rate = CGDisplayModeGetRefreshRate(mode);"
+                "#if MAC_OS_X_VERSION_MIN_REQUIRED >= 1060\n        double rate = CGDisplayModeGetRefreshRate(mode);\n#else\n        continue;\n#endif"
+                OSG_DARWIN_CONTENT "${OSG_DARWIN_CONTENT}")
+            
+            # Wrap best_match assignment
+            string(REPLACE 
+                "best_match = mode;"
+                "#if MAC_OS_X_VERSION_MIN_REQUIRED >= 1060\n        best_match = mode;\n#else\n        // Not available on 10.5\n#endif"
+                OSG_DARWIN_CONTENT "${OSG_DARWIN_CONTENT}")
+            
+            # Wrap best_match usage in conditional
+            string(REPLACE 
+                "if (best_match)"
+                "#if MAC_OS_X_VERSION_MIN_REQUIRED >= 1060\n        if (best_match)\n#else\n        if (false)\n#endif"
+                OSG_DARWIN_CONTENT "${OSG_DARWIN_CONTENT}")
+            
+            # Wrap CGDisplaySetDisplayMode
+            string(REPLACE 
+                "result = CGDisplaySetDisplayMode(displayid, best_match, NULL) != kCGErrorSuccess;"
+                "#if MAC_OS_X_VERSION_MIN_REQUIRED >= 1060\n        result = CGDisplaySetDisplayMode(displayid, best_match, NULL) != kCGErrorSuccess;\n#else\n        result = false;\n#endif"
+                OSG_DARWIN_CONTENT "${OSG_DARWIN_CONTENT}")
+            
             file(WRITE "${OSG_DARWIN_FILE}" "${OSG_DARWIN_CONTENT}")
-            message(STATUS "Patched OSG DarwinUtils.mm for macOS 10.5 compatibility (CGDisplayMode APIs - early return)")
+            message(STATUS "Patched OSG DarwinUtils.mm for macOS 10.5 compatibility (CGDisplayMode APIs - comprehensive wrapping)")
         else()
             message(WARNING "OSG DarwinUtils.mm not found at ${OSG_DARWIN_FILE} - patch may not be applied")
         endif()
