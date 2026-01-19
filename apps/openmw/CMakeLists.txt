@@ -58,8 +58,11 @@ add_openmw_dir (mwscript
     animationextensions transformationextensions consoleextensions userextensions
     )
 
-add_openmw_dir (mwlua
-    luamanagerimp object objectlists userdataserializer luaevents engineevents objectvariant
+# mwlua is excluded from unity builds due to memory constraints on PowerPC
+# Manually add files without unity build
+set (mwlua_files)
+set (mwlua_cppfiles)
+foreach (u luamanagerimp object objectlists userdataserializer luaevents engineevents objectvariant
     context menuscripts globalscripts localscripts playerscripts luabindings objectbindings cellbindings coremwscriptbindings
     mwscriptbindings camerabindings vfsbindings uibindings soundbindings inputbindings nearbybindings dialoguebindings
     postprocessingbindings stats recordstore debugbindings corebindings worldbindings worker landbindings magicbindings factionbindings
@@ -67,8 +70,22 @@ add_openmw_dir (mwlua
     types/types types/door types/item types/actor types/container types/lockable types/weapon types/npc
     types/creature types/player types/activator types/book types/lockpick types/probe types/apparatus
     types/potion types/ingredient types/misc types/repair types/armor types/light types/static
-    types/clothing types/levelledlist types/terminal
-    )
+    types/clothing types/levelledlist types/terminal)
+    file (GLOB ALL "mwlua/${u}.[ch]pp")
+    foreach (f ${ALL})
+        list (APPEND mwlua_files "${f}")
+        list (APPEND OPENMW_FILES "${f}")
+    endforeach (f)
+    file (GLOB ALL "mwlua/${u}.cpp")
+    foreach (f ${ALL})
+        list (APPEND mwlua_cppfiles "${f}")
+    endforeach (f)
+endforeach (u)
+# Add cpp files directly (no unity build)
+foreach (f ${mwlua_cppfiles})
+    list (APPEND OPENMW_FILES "${f}")
+endforeach (f)
+source_group ("apps\\openmw\\mwlua" FILES ${mwlua_files})
 
 add_openmw_dir (mwsound
     soundmanagerimp openaloutput ffmpegdecoder sound soundbuffer sounddecoder soundoutput
