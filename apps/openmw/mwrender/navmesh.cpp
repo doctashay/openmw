@@ -26,27 +26,24 @@
 
 namespace MWRender
 {
-    namespace
+    static osg::ref_ptr<osg::StateSet> makeDebugDrawStateSet()
     {
-        static osg::ref_ptr<osg::StateSet> makeDebugDrawStateSet()
-        {
-            const osg::ref_ptr<osg::LineWidth> lineWidth = new osg::LineWidth();
+        const osg::ref_ptr<osg::LineWidth> lineWidth = new osg::LineWidth();
 
-            const osg::ref_ptr<osg::BlendFunc> blendFunc = new osg::BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        const osg::ref_ptr<osg::BlendFunc> blendFunc = new osg::BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-            const osg::ref_ptr<SceneUtil::AutoDepth> depth = new SceneUtil::AutoDepth;
-            depth->setWriteMask(false);
+        const osg::ref_ptr<SceneUtil::AutoDepth> depth = new SceneUtil::AutoDepth;
+        depth->setWriteMask(false);
 
-            osg::ref_ptr<osg::StateSet> stateSet = new osg::StateSet;
-            stateSet->setMode(GL_BLEND, osg::StateAttribute::ON);
-            stateSet->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
-            stateSet->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
-            stateSet->setAttributeAndModes(lineWidth);
-            stateSet->setAttributeAndModes(blendFunc);
-            stateSet->setAttributeAndModes(depth);
+        osg::ref_ptr<osg::StateSet> stateSet = new osg::StateSet;
+        stateSet->setMode(GL_BLEND, osg::StateAttribute::ON);
+        stateSet->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
+        stateSet->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
+        stateSet->setAttributeAndModes(lineWidth);
+        stateSet->setAttributeAndModes(blendFunc);
+        stateSet->setAttributeAndModes(depth);
 
-            return stateSet;
-        }
+        return stateSet;
     }
 
     struct NavMesh::LessByTilePosition

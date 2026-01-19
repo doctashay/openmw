@@ -20,25 +20,22 @@
 
 namespace MWRender
 {
-    namespace
+    static osg::ref_ptr<osg::StateSet> makeGroupStateSet()
     {
-        osg::ref_ptr<osg::StateSet> makeGroupStateSet()
-        {
-            osg::ref_ptr<osg::Material> material = new osg::Material;
-            material->setColorMode(osg::Material::AMBIENT_AND_DIFFUSE);
+        osg::ref_ptr<osg::Material> material = new osg::Material;
+        material->setColorMode(osg::Material::AMBIENT_AND_DIFFUSE);
 
-            osg::ref_ptr<osg::StateSet> stateSet = new osg::StateSet;
-            stateSet->setAttribute(material);
-            return stateSet;
-        }
+        osg::ref_ptr<osg::StateSet> stateSet = new osg::StateSet;
+        stateSet->setAttribute(material);
+        return stateSet;
+    }
 
-        static osg::ref_ptr<osg::StateSet> makeDebugDrawStateSet()
-        {
-            osg::ref_ptr<osg::StateSet> stateSet = new osg::StateSet;
-            stateSet->setAttributeAndModes(new osg::LineWidth());
+    static osg::ref_ptr<osg::StateSet> makeDebugDrawStateSet()
+    {
+        osg::ref_ptr<osg::StateSet> stateSet = new osg::StateSet;
+        stateSet->setAttributeAndModes(new osg::LineWidth());
 
-            return stateSet;
-        }
+        return stateSet;
     }
 
     ActorsPaths::ActorsPaths(const osg::ref_ptr<osg::Group>& root, bool enabled)
