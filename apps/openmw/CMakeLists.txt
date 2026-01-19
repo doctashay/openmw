@@ -270,11 +270,26 @@ if(APPLE AND BUILD_OPENMW)
     target_link_libraries(openmw ${COCOA_FRAMEWORK} ${IOKIT_FRAMEWORK})
 
     if (FFmpeg_FOUND)
-        target_link_options(openmw PRIVATE "LINKER:SHELL:-framework CoreVideo"
-                                           "LINKER:SHELL:-framework CoreMedia"
-                                           "LINKER:SHELL:-framework VideoToolbox"
-                                           "LINKER:SHELL:-framework AudioToolbox"
-                                           "LINKER:SHELL:-framework VideoDecodeAcceleration")
+        # CoreMedia, CoreVideo, VideoToolbox require macOS 10.7+, not available on 10.5
+        # Check deployment target - if it's 10.5 or not set (defaulting to 10.5), skip these frameworks
+        if (CMAKE_OSX_DEPLOYMENT_TARGET)
+            if (CMAKE_OSX_DEPLOYMENT_TARGET VERSION_GREATER_EQUAL "10.7")
+                target_link_options(openmw PRIVATE "LINKER:SHELL:-framework CoreVideo"
+                                                   "LINKER:SHELL:-framework CoreMedia"
+                                                   "LINKER:SHELL:-framework VideoToolbox"
+                                                   "LINKER:SHELL:-framework AudioToolbox"
+                                                   "LINKER:SHELL:-framework VideoDecodeAcceleration")
+            endif()
+        else()
+            # No deployment target set, assume 10.5 and skip these frameworks
+            message(STATUS "Skipping CoreMedia/CoreVideo/VideoToolbox frameworks (not available on macOS 10.5)")
+        endif()
+    endif()
+    
+    # Ensure app bundle is built for PowerPC architecture
+    if (OPENMW_POWERPC_BUILD OR (CMAKE_OSX_ARCHITECTURES AND CMAKE_OSX_ARCHITECTURES MATCHES "ppc"))
+        set_target_properties(openmw PROPERTIES OSX_ARCHITECTURES "ppc")
+        message(STATUS "Setting openmw app bundle architecture to PowerPC")
     endif()
 endif()
 
