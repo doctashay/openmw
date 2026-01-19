@@ -191,7 +191,7 @@ include_directories(
     ${FFmpeg_INCLUDE_DIRS}
 )
 
-target_link_libraries(openmw-lib
+target_link_libraries(openmw-lib PRIVATE
     # CMake's built-in OSG finder does not use pkgconfig, so we have to
     # manually ensure the order is correct for inter-library dependencies.
     # This only makes a difference with `-DOPENMW_USE_SYSTEM_OSG=ON -DOSG_STATIC=ON`.
@@ -213,7 +213,7 @@ target_link_libraries(openmw-lib
     oics
     # components PRIVATE for include directories (RecastNavigation headers)
     # Actual library linking happens via components_whole_archive to openmw to avoid duplicate symbols
-    PRIVATE components
+    components
 )
 
 if (MSVC AND PRECOMPILE_HEADERS_WITH_MSVC)
