@@ -167,7 +167,16 @@ if(BUILD_OPENMW)
         )
     endif()
 
-    target_link_libraries(openmw openmw-lib components)
+    # Use --whole-archive for components to ensure Platform::init() and other symbols
+    # are included from static library, especially important with unity builds
+    # Create an INTERFACE library wrapper for components with --whole-archive
+    add_library(components_whole_archive INTERFACE)
+    if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+        get_whole_archive_options(COMPONENTS_WHOLE_ARCHIVE_OPTS $<TARGET_FILE:components>)
+        target_link_options(components_whole_archive INTERFACE ${COMPONENTS_WHOLE_ARCHIVE_OPTS})
+    endif()
+    target_link_libraries(components_whole_archive INTERFACE components)
+    target_link_libraries(openmw openmw-lib components_whole_archive)
 
     # Workaround necessary to ensure osgAnimation::MatrixLinearSampler dynamic casts work under Clang
     # NOTE: it's unclear whether the broken behavior is spec-compliant
