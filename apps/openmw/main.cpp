@@ -211,7 +211,7 @@ namespace
 
 int runApplication(int argc, char* argv[])
 {
-    Platform::init();
+    //Platform::init();
 
 #ifdef __APPLE__
     setenv("OSG_GL_TEXTURE_STORAGE", "OFF", 0);
