@@ -280,7 +280,7 @@ option(OPENMW_USE_SYSTEM_SQLITE3 "Use system provided SQLite3 library" ON)
 option(OPENMW_USE_SYSTEM_BENCHMARK "Use system Google Benchmark library." OFF)
 option(OPENMW_USE_SYSTEM_GOOGLETEST "Use system Google Test library." OFF)
 
-option(OPENMW_UNITY_BUILD "Use fewer compilation units to speed up compile time" ON)
+option(OPENMW_UNITY_BUILD "Use fewer compilation units to speed up compile time" OFF)
 option(OPENMW_LTO_BUILD "Build OpenMW with Link-Time Optimization (Needs ~2GB of RAM)" OFF)
 
 # OS X deployment
