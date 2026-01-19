@@ -161,7 +161,12 @@ namespace Bsa
         alignas(T) char buffer[sizeof(T)];
         in.read(buffer, sizeof(T));
         if (in.fail())
+        {
+            // Initialize to zero to avoid using uninitialized values
+            // This prevents segfaults when endian conversion is applied to garbage data
+            value = T{};
             return;
+        }
         std::memcpy(&value, buffer, sizeof(T));
     }
 }
