@@ -28,7 +28,7 @@ namespace MWRender
 {
     namespace
     {
-        inline osg::ref_ptr<osg::StateSet> makeDebugDrawStateSet()
+        osg::ref_ptr<osg::StateSet> makeNavMeshDebugDrawStateSet()
         {
             const osg::ref_ptr<osg::LineWidth> lineWidth = new osg::LineWidth();
 
@@ -195,7 +195,7 @@ namespace MWRender
         : mRootNode(root)
         , mWorkQueue(workQueue)
         , mGroupStateSet(SceneUtil::makeDetourGroupStateSet())
-        , mDebugDrawStateSet(makeDebugDrawStateSet())
+        , mDebugDrawStateSet(makeNavMeshDebugDrawStateSet())
         , mEnabled(enabled)
         , mMode(mode)
         , mId(std::numeric_limits<std::size_t>::max())

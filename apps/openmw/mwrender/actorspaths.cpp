@@ -22,7 +22,7 @@ namespace MWRender
 {
     namespace
     {
-        inline osg::ref_ptr<osg::StateSet> makeGroupStateSet()
+        osg::ref_ptr<osg::StateSet> makeActorsPathsGroupStateSet()
         {
             osg::ref_ptr<osg::Material> material = new osg::Material;
             material->setColorMode(osg::Material::AMBIENT_AND_DIFFUSE);
@@ -32,7 +32,7 @@ namespace MWRender
             return stateSet;
         }
 
-        inline osg::ref_ptr<osg::StateSet> makeDebugDrawStateSet()
+        osg::ref_ptr<osg::StateSet> makeActorsPathsDebugDrawStateSet()
         {
             osg::ref_ptr<osg::StateSet> stateSet = new osg::StateSet;
             stateSet->setAttributeAndModes(new osg::LineWidth());
@@ -44,8 +44,8 @@ namespace MWRender
     ActorsPaths::ActorsPaths(const osg::ref_ptr<osg::Group>& root, bool enabled)
         : mRootNode(root)
         , mEnabled(enabled)
-        , mGroupStateSet(makeGroupStateSet())
-        , mDebugDrawStateSet(makeDebugDrawStateSet())
+        , mGroupStateSet(makeActorsPathsGroupStateSet())
+        , mDebugDrawStateSet(makeActorsPathsDebugDrawStateSet())
     {
     }
 
