@@ -239,22 +239,26 @@ void BSAFile::readHeader(std::istream& input)
             fail("Archive contains non-zero terminated string");
 
         const std::size_t nameSize = end - begin;
+        
+        // Validate name size is reasonable (prevent huge values from corrupted offsets)
+        if (nameSize > 4096) // Max reasonable filename length
+            fail(std::format("Archive contains filename that is too long: {} bytes at offset {}", nameSize, nameOffset));
 
         FileStruct fs;
 
         fs.mFileSize = fileSize;
         fs.mOffset = static_cast<uint32_t>(offset);
         fs.mHash = hashes[i];
-        fs.mNameOffset = nameOffset;
-        fs.mNameSize = static_cast<uint32_t>(nameSize);
-        fs.mNamesBuffer = &mStringBuf;
+        // Copy filename into FileStruct to avoid buffer invalidation issues
+        fs.mName.assign(begin, nameSize);
 
         mFiles.push_back(fs);
 
         endOfNameBuffer = std::max(endOfNameBuffer, nameOffset + nameSize + 1);
         assert(endOfNameBuffer <= mStringBuf.size());
     }
-    mStringBuf.resize(endOfNameBuffer);
+    // String buffer is no longer needed after copying filenames, but keep it for now
+    // in case other code still references it
 
     std::sort(mFiles.begin(), mFiles.end(),
         [](const FileStruct& left, const FileStruct& right) { return left.mOffset < right.mOffset; });
@@ -283,13 +287,20 @@ void Bsa::BSAFile::writeHeader()
     size_t filenum = mFiles.size();
     std::vector<uint32_t> offsets(3 * filenum);
     std::vector<Hash> hashes(filenum);
+    
+    // Rebuild string buffer from stored filenames
+    mStringBuf.clear();
     for (size_t i = 0; i < filenum; i++)
     {
         auto& f = mFiles[i];
         offsets[i * 2] = f.mFileSize;
         offsets[i * 2 + 1] = f.mOffset - fileDataOffset;
-        offsets[2 * filenum + i] = f.mNameOffset;
+        // Calculate name offset from current string buffer size
+        offsets[2 * filenum + i] = static_cast<uint32_t>(mStringBuf.size());
         hashes[i] = f.mHash;
+        // Append filename to string buffer
+        mStringBuf.insert(mStringBuf.end(), f.mName.begin(), f.mName.end());
+        mStringBuf.push_back('\0');
     }
     output.write(reinterpret_cast<char*>(offsets.data()), sizeof(uint32_t) * offsets.size());
     output.write(reinterpret_cast<char*>(mStringBuf.data()), mStringBuf.size());
@@ -377,12 +388,8 @@ void Bsa::BSAFile::addFile(const std::string& filename, std::istream& file)
         newFile.mOffset = static_cast<uint32_t>(stream.tellp());
     }
 
-    newFile.mNameOffset = static_cast<uint32_t>(mStringBuf.size());
-    newFile.mNameSize = static_cast<uint32_t>(filename.size());
-    newFile.mNamesBuffer = &mStringBuf;
-
-    mStringBuf.insert(mStringBuf.end(), filename.begin(), filename.end());
-    mStringBuf.push_back('\0');
+    // Store filename directly in FileStruct
+    newFile.mName = filename;
 
     mFiles.push_back(newFile);
 

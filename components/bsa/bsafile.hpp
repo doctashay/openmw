@@ -72,11 +72,9 @@ namespace Bsa
             uint32_t mFileSize = 0;
             uint32_t mOffset = 0;
             Hash mHash{};
-            uint32_t mNameOffset = 0;
-            uint32_t mNameSize = 0;
-            std::vector<char>* mNamesBuffer = nullptr;
+            std::string mName; // Store filename directly to avoid buffer invalidation issues
 
-            std::string_view name() const { return std::string_view(mNamesBuffer->data() + mNameOffset, mNameSize); }
+            std::string_view name() const { return std::string_view(mName); }
         };
         typedef std::vector<FileStruct> FileList;
 

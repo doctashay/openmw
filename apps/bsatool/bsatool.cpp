@@ -245,31 +245,104 @@ int extractAll(std::unique_ptr<File>& bsa, Arguments& info)
 {
     for (const auto& file : bsa->getList())
     {
-        std::string extractPath(file.name());
+        // Validate filename before using it
+        std::string_view nameView = file.name();
+        if (nameView.empty())
+        {
+            std::cout << "WARNING: Skipping file with empty or invalid name" << std::endl;
+            continue;
+        }
+        
+        // Convert to string and sanitize
+        std::string extractPath(nameView);
+        
+        // Validate the string doesn't contain null bytes or other problematic characters
+        if (extractPath.find('\0') != std::string::npos)
+        {
+            std::cout << "WARNING: Skipping file with null bytes in name: " << extractPath << std::endl;
+            continue;
+        }
+        
         Misc::StringUtils::replaceAll(extractPath, "\\", "/");
 
         // Get the target path (the path the file will be extracted to)
-        auto target = info.outdir;
-        target /= Misc::StringUtils::stringToU8String(extractPath);
+        std::filesystem::path target;
+        try
+        {
+            target = info.outdir;
+            target /= Misc::StringUtils::stringToU8String(extractPath);
+        }
+        catch (const std::exception& e)
+        {
+            std::cout << "ERROR: Failed to create path for file: " << extractPath << " - " << e.what() << std::endl;
+            continue;
+        }
 
         // Create the directory hierarchy
-        std::filesystem::create_directories(target.parent_path());
+        try
+        {
+            std::filesystem::create_directories(target.parent_path());
+        }
+        catch (const std::exception& e)
+        {
+            std::cout << "ERROR: Failed to create directory: " << target.parent_path() << " - " << e.what() << std::endl;
+            continue;
+        }
 
-        std::filesystem::file_status s = std::filesystem::status(target.parent_path());
+        std::filesystem::file_status s;
+        try
+        {
+            s = std::filesystem::status(target.parent_path());
+        }
+        catch (const std::exception& e)
+        {
+            std::cout << "ERROR: Failed to get status for: " << target.parent_path() << " - " << e.what() << std::endl;
+            continue;
+        }
+        
         if (!std::filesystem::is_directory(s))
         {
             std::cout << "ERROR: " << target.parent_path() << " is not a directory." << std::endl;
-            return 3;
+            continue;
         }
 
         // Get a stream for the file to extract
         Files::IStreamPtr data = bsa->getFile(&file);
-        std::ofstream out(target, std::ios::binary);
+        if (!data)
+        {
+            std::cout << "WARNING: Failed to get stream for file: " << extractPath << std::endl;
+            continue;
+        }
+        
+        std::ofstream out;
+        try
+        {
+            out.open(target, std::ios::binary);
+            if (!out.is_open())
+            {
+                std::cout << "ERROR: Failed to open output file: " << target << std::endl;
+                continue;
+            }
+        }
+        catch (const std::exception& e)
+        {
+            std::cout << "ERROR: Exception opening output file: " << target << " - " << e.what() << std::endl;
+            continue;
+        }
 
         // Write the file to disk
-        std::cout << "Extracting " << Files::pathToUnicodeString(target) << std::endl;
-        out << data->rdbuf();
-        out.close();
+        try
+        {
+            std::cout << "Extracting " << Files::pathToUnicodeString(target) << std::endl;
+            out << data->rdbuf();
+            out.close();
+        }
+        catch (const std::exception& e)
+        {
+            std::cout << "ERROR: Exception writing file: " << target << " - " << e.what() << std::endl;
+            out.close();
+            continue;
+        }
     }
 
     return 0;
