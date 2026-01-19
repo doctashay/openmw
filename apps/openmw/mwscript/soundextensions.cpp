@@ -39,7 +39,7 @@ namespace MWScript
                 std::string_view text = runtime.getStringLiteral(runtime[0].mInteger);
                 runtime.pop();
 
-                MWBase::Environment::get().getSoundManager()->say(ptr, Misc::ResourceHelpers::correctSoundPath(file));
+                MWBase::Environment::get().getSoundManager()->say(ptr, ::Misc::ResourceHelpers::correctSoundPath(file));
 
                 if (Settings::gui().mSubtitles)
                     context.messageBox(text);
@@ -67,7 +67,7 @@ namespace MWScript
                 runtime.pop();
 
                 MWBase::Environment::get().getSoundManager()->streamMusic(
-                    Misc::ResourceHelpers::correctMusicPath(music), MWSound::MusicType::MWScript);
+                    ::Misc::ResourceHelpers::correctMusicPath(music), MWSound::MusicType::MWScript);
             }
         };
 
