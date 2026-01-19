@@ -143,10 +143,39 @@ elif [ -f "$INSTALL_PREFIX/lib/libboost_program_options.a" ]; then
     lipo -info "$INSTALL_PREFIX/lib/libboost_program_options.a" || true
 fi
 
+# Fix install_name for dylibs to use absolute paths
+echo ""
+echo "Fixing install_name for Boost dylibs..."
+for dylib in "$INSTALL_PREFIX/lib"/libboost_*.dylib; do
+    if [ -f "$dylib" ]; then
+        dylib_name=$(basename "$dylib")
+        # Get current install_name
+        current_name=$(otool -D "$dylib" | tail -n 1)
+        
+        # Set install_name to absolute path in install directory
+        new_name="$INSTALL_PREFIX/lib/$dylib_name"
+        
+        if [ "$current_name" != "$new_name" ]; then
+            echo "  Fixing install_name for $dylib_name"
+            echo "    From: $current_name"
+            echo "    To: $new_name"
+            install_name_tool -id "$new_name" "$dylib" || echo "    Warning: install_name_tool failed (may need sudo)"
+        fi
+    fi
+done
+
+echo ""
+echo "=== Boost installation complete! ==="
+echo ""
+echo "Boost has been installed to: $INSTALL_PREFIX"
 echo ""
 echo "To use this Boost installation, add to your CMake command:"
 echo "  -D Boost_ROOT=$INSTALL_PREFIX"
 echo ""
-echo "Or set environment variable:"
+echo "Or set environment variable (recommended):"
 echo "  export Boost_ROOT=$INSTALL_PREFIX"
+echo ""
+echo "After setting Boost_ROOT, reconfigure CMake:"
+echo "  cd build_test"
+echo "  cmake ..  # (with all your other cmake args)"
 echo ""
