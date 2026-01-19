@@ -211,6 +211,9 @@ target_link_libraries(openmw-lib
     ${RecastNavigation_LIBRARIES}
     osg-ffmpeg-videoplayer
     oics
+    # components PRIVATE for include directories (RecastNavigation headers)
+    # Actual library linking happens via components_whole_archive to openmw to avoid duplicate symbols
+    PRIVATE components
 )
 
 if (MSVC AND PRECOMPILE_HEADERS_WITH_MSVC)
