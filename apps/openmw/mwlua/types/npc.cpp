@@ -167,7 +167,7 @@ namespace
         return npc;
     }
 
-    ESM::RefId parseFactionId(std::string_view faction)
+    ESM::RefId parseNpcFactionId(std::string_view faction)
     {
         ESM::RefId id = ESM::RefId::deserializeText(faction);
         const MWWorld::ESMStore* store = MWBase::Environment::get().getESMStore();
@@ -299,7 +299,7 @@ namespace MWLua
         npc["createRecordDraft"] = tableToNPC;
         npc["getFactionRank"] = [](const Object& actor, std::string_view faction) -> size_t {
             const MWWorld::Ptr ptr = actor.ptr();
-            ESM::RefId factionId = parseFactionId(faction);
+            ESM::RefId factionId = parseNpcFactionId(faction);
 
             const MWMechanics::NpcStats& npcStats = ptr.getClass().getNpcStats(ptr);
             if (ptr == MWBase::Environment::get().getWorld()->getPlayerPtr())
@@ -324,7 +324,7 @@ namespace MWLua
                 throw std::runtime_error("Local scripts can modify only self");
 
             const MWWorld::Ptr ptr = actor.ptr();
-            ESM::RefId factionId = parseFactionId(faction);
+            ESM::RefId factionId = parseNpcFactionId(faction);
 
             const ESM::Faction* factionPtr
                 = MWBase::Environment::get().getESMStore()->get<ESM::Faction>().find(factionId);
@@ -357,7 +357,7 @@ namespace MWLua
                 return;
 
             const MWWorld::Ptr ptr = actor.ptr();
-            ESM::RefId factionId = parseFactionId(faction);
+            ESM::RefId factionId = parseNpcFactionId(faction);
 
             const ESM::Faction* factionPtr
                 = MWBase::Environment::get().getESMStore()->get<ESM::Faction>().search(factionId);
@@ -400,7 +400,7 @@ namespace MWLua
                 throw std::runtime_error("Local scripts can modify only self");
 
             const MWWorld::Ptr ptr = actor.ptr();
-            ESM::RefId factionId = parseFactionId(faction);
+            ESM::RefId factionId = parseNpcFactionId(faction);
 
             if (ptr == MWBase::Environment::get().getWorld()->getPlayerPtr())
             {
@@ -419,7 +419,7 @@ namespace MWLua
                 throw std::runtime_error("Local scripts can modify only self");
 
             const MWWorld::Ptr ptr = actor.ptr();
-            ESM::RefId factionId = parseFactionId(faction);
+            ESM::RefId factionId = parseNpcFactionId(faction);
 
             if (ptr == MWBase::Environment::get().getWorld()->getPlayerPtr())
             {
@@ -432,7 +432,7 @@ namespace MWLua
 
         npc["getFactionReputation"] = [](const Object& actor, std::string_view faction) {
             const MWWorld::Ptr ptr = actor.ptr();
-            ESM::RefId factionId = parseFactionId(faction);
+            ESM::RefId factionId = parseNpcFactionId(faction);
 
             return ptr.getClass().getNpcStats(ptr).getFactionReputation(factionId);
         };
@@ -442,7 +442,7 @@ namespace MWLua
                 throw std::runtime_error("Local scripts can modify only self");
 
             const MWWorld::Ptr ptr = actor.ptr();
-            ESM::RefId factionId = parseFactionId(faction);
+            ESM::RefId factionId = parseNpcFactionId(faction);
 
             ptr.getClass().getNpcStats(ptr).setFactionReputation(factionId, value);
         };
@@ -452,7 +452,7 @@ namespace MWLua
                 throw std::runtime_error("Local scripts can modify only self");
 
             const MWWorld::Ptr ptr = actor.ptr();
-            ESM::RefId factionId = parseFactionId(faction);
+            ESM::RefId factionId = parseNpcFactionId(faction);
 
             MWMechanics::NpcStats& npcStats = ptr.getClass().getNpcStats(ptr);
             int existingReputation = npcStats.getFactionReputation(factionId);
@@ -464,7 +464,7 @@ namespace MWLua
                 throw std::runtime_error("Local scripts can modify only self");
 
             const MWWorld::Ptr ptr = actor.ptr();
-            ESM::RefId factionId = parseFactionId(faction);
+            ESM::RefId factionId = parseNpcFactionId(faction);
             ptr.getClass().getNpcStats(ptr).expell(factionId, false);
         };
         npc["clearExpelled"] = [](Object& actor, std::string_view faction) {
@@ -472,12 +472,12 @@ namespace MWLua
                 throw std::runtime_error("Local scripts can modify only self");
 
             const MWWorld::Ptr ptr = actor.ptr();
-            ESM::RefId factionId = parseFactionId(faction);
+            ESM::RefId factionId = parseNpcFactionId(faction);
             ptr.getClass().getNpcStats(ptr).clearExpelled(factionId);
         };
         npc["isExpelled"] = [](const Object& actor, std::string_view faction) {
             const MWWorld::Ptr ptr = actor.ptr();
-            ESM::RefId factionId = parseFactionId(faction);
+            ESM::RefId factionId = parseNpcFactionId(faction);
             return ptr.getClass().getNpcStats(ptr).getExpelled(factionId);
         };
         npc["getFactions"] = [](sol::this_state thisState, const Object& actor) {

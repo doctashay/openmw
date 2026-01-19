@@ -94,7 +94,7 @@ namespace
         return id;
     }
 
-    ESM::RefId parseFactionId(std::string_view faction)
+    ESM::RefId parsePlayerFactionId(std::string_view faction)
     {
         ESM::RefId id = ESM::RefId::deserializeText(faction);
         if (!MWBase::Environment::get().getESMStore()->get<ESM::Faction>().search(id))
@@ -458,7 +458,7 @@ namespace MWLua
             if (type < 0 || type > MWBase::MechanicsManager::OffenseType::OT_Pickpocket)
                 throw std::runtime_error("Invalid offense type");
 
-            ESM::RefId factionId = parseFactionId(faction);
+            ESM::RefId factionId = parsePlayerFactionId(faction);
             // If the faction is provided but not found, error out
             if (faction != "" && factionId == ESM::RefId())
                 throw std::runtime_error("Faction does not exist");
