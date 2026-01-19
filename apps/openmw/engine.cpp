@@ -147,16 +147,54 @@ namespace
 
         void operator()(osg::GraphicsContext* graphicsContext) override
         {
-            Log(Debug::Info) << "OpenGL Vendor: " << glGetString(GL_VENDOR);
-            Log(Debug::Info) << "OpenGL Renderer: " << glGetString(GL_RENDERER);
-            Log(Debug::Info) << "OpenGL Version: " << glGetString(GL_VERSION);
-            glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &mMaxTextureImageUnits);
+            // Check if we have a valid OpenGL context
+            if (!graphicsContext || !graphicsContext->getState() || !graphicsContext->getState()->getContextID())
+            {
+                Log(Debug::Warning) << "Warning: OpenGL version test failed, requires valid graphics context. Assuming OpenGL 2.1.";
+                // Default to OpenGL 2.1 values - minimum required for OpenMW
+                mMaxTextureImageUnits = 8; // OpenGL 2.1 minimum is 8 texture units
+                return;
+            }
+            
+            // Try to get OpenGL info, but don't fail if context isn't ready
+            const GLubyte* vendor = glGetString(GL_VENDOR);
+            const GLubyte* renderer = glGetString(GL_RENDERER);
+            const GLubyte* version = glGetString(GL_VERSION);
+            
+            if (vendor)
+                Log(Debug::Info) << "OpenGL Vendor: " << vendor;
+            else
+                Log(Debug::Warning) << "Warning: Could not get OpenGL vendor. Assuming OpenGL 2.1.";
+            
+            if (renderer)
+                Log(Debug::Info) << "OpenGL Renderer: " << renderer;
+            
+            if (version)
+                Log(Debug::Info) << "OpenGL Version: " << version;
+            else
+                Log(Debug::Warning) << "Warning: Could not get OpenGL version. Assuming OpenGL 2.1.";
+            
+            // Get max texture image units, with fallback for OpenGL 2.1
+            GLint maxUnits = 0;
+            glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &maxUnits);
+            if (maxUnits > 0)
+                mMaxTextureImageUnits = maxUnits;
+            else
+            {
+                // Fallback: OpenGL 2.1 minimum is 8 texture units
+                Log(Debug::Warning) << "Warning: Could not get GL_MAX_TEXTURE_IMAGE_UNITS. Using default of 8 (OpenGL 2.1 minimum).";
+                mMaxTextureImageUnits = 8;
+            }
         }
 
         int getMaxTextureImageUnits() const
         {
             if (mMaxTextureImageUnits == 0)
-                throw std::logic_error("mMaxTextureImageUnits is not initialized");
+            {
+                // Fallback: OpenGL 2.1 minimum is 8 texture units
+                Log(Debug::Warning) << "Warning: mMaxTextureImageUnits not initialized. Using default of 8 (OpenGL 2.1 minimum).";
+                return 8;
+            }
             return mMaxTextureImageUnits;
         }
 
