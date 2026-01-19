@@ -608,10 +608,11 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "ppc|powerpc" OR CMAKE_OSX_ARCHITECTURES MATCH
     
     # Add malloc alignment fix for PowerPC (workaround for Boost alignment issues)
     # This must be linked early to intercept malloc/free calls
-    if(APPLE AND (CMAKE_OSX_ARCHITECTURES MATCHES "ppc" OR OPENMW_POWERPC_BUILD))
-        list(APPEND COMPONENT_FILES "${OpenMW_SOURCE_DIR}/components/misc/malloc_alignment_fix.cpp")
-        message(STATUS "Added malloc alignment fix for PowerPC (Boost workaround)")
-    endif()
+    # DISABLED: Using OS malloc instead to debug endianness issues
+    # if(APPLE AND (CMAKE_OSX_ARCHITECTURES MATCHES "ppc" OR OPENMW_POWERPC_BUILD))
+    #     list(APPEND COMPONENT_FILES "${OpenMW_SOURCE_DIR}/components/misc/malloc_alignment_fix.cpp")
+    #     message(STATUS "Added malloc alignment fix for PowerPC (Boost workaround)")
+    # endif()
 endif()
 
 add_library(components STATIC ${COMPONENT_FILES})

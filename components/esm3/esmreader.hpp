@@ -316,7 +316,6 @@ namespace ESM
         void getT(X& x)
         {
             getExact(&x, sizeof(X));
-            // ESM files are little-endian, convert arithmetic types on big-endian systems
             if constexpr (std::is_arithmetic_v<X> && Misc::IS_BIG_ENDIAN)
                 x = Misc::fromLittleEndian(x);
         }
@@ -332,7 +331,7 @@ namespace ESM
             mEsm->read(static_cast<char*>(x), static_cast<std::streamsize>(size));
         }
 
-        void getName(NAME& name) { getT(name.mData); }
+        void getName(NAME& name) { getExact(name.mData, sizeof(name.mData)); }
         void getUint(uint32_t& u) { getT(u); }
 
         std::string getMaybeFixedStringSize(std::size_t size);

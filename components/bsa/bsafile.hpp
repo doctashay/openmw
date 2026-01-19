@@ -159,11 +159,11 @@ namespace Bsa
     {
         static_assert(std::is_arithmetic_v<T>);
         alignas(T) char buffer[sizeof(T)];
+        std::memset(buffer, 0, sizeof(T)); // Initialize buffer to zero
         in.read(buffer, sizeof(T));
-        if (in.fail())
+        if (in.fail() || in.gcount() != sizeof(T))
         {
-            // Initialize to zero to avoid using uninitialized values
-            // This prevents segfaults when endian conversion is applied to garbage data
+            // Initialize to zero on failure to prevent using uninitialized data
             value = T{};
             return;
         }
