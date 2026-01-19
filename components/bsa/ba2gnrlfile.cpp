@@ -17,22 +17,6 @@
 #include "ba2file.hpp"
 #include "memorystream.hpp"
 
-namespace
-{
-    // Helper function for safe aligned reading on PowerPC
-    // PowerPC requires aligned memory access, so we read into a char buffer
-    // first, then memcpy to the aligned variable
-    template<typename T>
-    inline void readAligned(std::istream& in, T& value)
-    {
-        static_assert(std::is_arithmetic_v<T>);
-        alignas(T) char buffer[sizeof(T)];
-        in.read(buffer, sizeof(T));
-        if (in.fail())
-            return;
-        std::memcpy(&value, buffer, sizeof(T));
-    }
-}
 
 namespace Bsa
 {
