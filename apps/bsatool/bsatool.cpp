@@ -2,6 +2,8 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <sstream>
+#include <cstring>
 #include <vector>
 
 #include <boost/program_options.hpp>
@@ -243,6 +245,68 @@ int extract(std::unique_ptr<File>& bsa, Arguments& info)
 template <typename File>
 int extractAll(std::unique_ptr<File>& bsa, Arguments& info)
 {
+    auto isValidUtf8 = [](std::string_view value)
+    {
+        std::size_t i = 0;
+        while (i < value.size())
+        {
+            const unsigned char c = static_cast<unsigned char>(value[i]);
+            if (c <= 0x7F)
+            {
+                ++i;
+                continue;
+            }
+            std::size_t length = 0;
+            if ((c & 0xE0) == 0xC0)
+                length = 2;
+            else if ((c & 0xF0) == 0xE0)
+                length = 3;
+            else if ((c & 0xF8) == 0xF0)
+                length = 4;
+            else
+                return false;
+
+            if (i + length > value.size())
+                return false;
+
+            for (std::size_t j = 1; j < length; ++j)
+            {
+                const unsigned char continuation = static_cast<unsigned char>(value[i + j]);
+                if ((continuation & 0xC0) != 0x80)
+                    return false;
+            }
+            i += length;
+        }
+        return true;
+    };
+
+    auto hexDump = [](std::string_view value)
+    {
+        std::ostringstream stream;
+        stream << std::hex << std::setfill('0');
+        for (std::size_t i = 0; i < value.size(); ++i)
+        {
+            if (i != 0)
+                stream << ' ';
+            stream << std::setw(2) << static_cast<unsigned>(static_cast<unsigned char>(value[i]));
+        }
+        return stream.str();
+    };
+
+    auto buildTargetPath = [&](const std::string& extractPath) -> std::filesystem::path
+    {
+        try
+        {
+            if (isValidUtf8(extractPath))
+                return info.outdir / Misc::StringUtils::stringToU8String(extractPath);
+        }
+        catch (const std::exception&)
+        {
+        }
+
+        return info.outdir / std::filesystem::path(extractPath);
+    };
+
     for (const auto& file : bsa->getList())
     {
         // Validate filename before using it
@@ -266,17 +330,7 @@ int extractAll(std::unique_ptr<File>& bsa, Arguments& info)
         Misc::StringUtils::replaceAll(extractPath, "\\", "/");
 
         // Get the target path (the path the file will be extracted to)
-        std::filesystem::path target;
-        try
-        {
-            target = info.outdir;
-            target /= Misc::StringUtils::stringToU8String(extractPath);
-        }
-        catch (const std::exception& e)
-        {
-            std::cout << "ERROR: Failed to create path for file: " << extractPath << " - " << e.what() << std::endl;
-            continue;
-        }
+        std::filesystem::path target = buildTargetPath(extractPath);
 
         // Create the directory hierarchy
         try
@@ -321,12 +375,19 @@ int extractAll(std::unique_ptr<File>& bsa, Arguments& info)
             if (!out.is_open())
             {
                 std::cout << "ERROR: Failed to open output file: " << target << std::endl;
+                std::cout << "ERROR: errno=" << errno << " (" << std::strerror(errno) << ")" << std::endl;
+                std::cout << "ERROR: raw filename bytes (" << nameView.size() << "): " << hexDump(nameView)
+                          << std::endl;
+                std::cout << "ERROR: extract path: " << extractPath << std::endl;
                 continue;
             }
         }
         catch (const std::exception& e)
         {
             std::cout << "ERROR: Exception opening output file: " << target << " - " << e.what() << std::endl;
+            std::cout << "ERROR: raw filename bytes (" << nameView.size() << "): " << hexDump(nameView)
+                      << std::endl;
+            std::cout << "ERROR: extract path: " << extractPath << std::endl;
             continue;
         }
 
