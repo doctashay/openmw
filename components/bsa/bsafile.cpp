@@ -31,10 +31,13 @@
 
 #include <format>
 #include <fstream>
+#include <iomanip>
 #include <istream>
+#include <sstream>
 #include <system_error>
 
 #include <components/esm/fourcc.hpp>
+#include <components/debug/debuglog.hpp>
 #include <components/files/constrainedfilestream.hpp>
 #include <components/files/utils.hpp>
 #include <components/misc/endianness.hpp>
@@ -150,6 +153,13 @@ void BSAFile::readHeader(std::istream& input)
         filenum = head[2];
     }
 
+    const std::streamsize stringTableSize = dirsize - 12 * filenum;
+    Log(Debug::Info) << "BSA header: dirsize=" << dirsize << " filenum=" << filenum
+                     << " stringTableSize=" << stringTableSize << '\n';
+
+    if (stringTableSize <= 0 || stringTableSize > fsize)
+        fail(std::format("Invalid string table size: {}", stringTableSize));
+
     // Each file must take up at least 21 bytes of data in the bsa. So
     // if files*21 overflows the file size then we are guaranteed that
     // the archive is corrupt.
@@ -172,13 +182,18 @@ void BSAFile::readHeader(std::istream& input)
     }
 
     // Read the string table
-    mStringBuf.resize(dirsize - 12 * filenum);
+    mStringBuf.resize(static_cast<std::size_t>(stringTableSize));
     input.read(mStringBuf.data(), mStringBuf.size());
 
     if (input.fail())
         fail(std::format("Failed to read string table: {}", std::generic_category().message(errno)));
 
     // Check our position
+    if (input.tellg() != std::streampos(12 + dirsize))
+    {
+        Log(Debug::Warning) << "BSA string table position mismatch: got=" << input.tellg()
+                            << " expected=" << (12 + dirsize) << '\n';
+    }
     assert(input.tellg() == std::streampos(12 + dirsize));
     std::vector<Hash> hashes(filenum);
     static_assert(sizeof(Hash) == 8);
@@ -201,6 +216,19 @@ void BSAFile::readHeader(std::istream& input)
     // relative to this. 12 header bytes + directory + hash table
     // (skipped)
     const std::streamsize fileDataOffset = 12 + dirsize + 8 * filenum;
+
+    auto hexDump = [](std::string_view value)
+    {
+        std::ostringstream stream;
+        stream << std::hex << std::setfill('0');
+        for (std::size_t i = 0; i < value.size(); ++i)
+        {
+            if (i != 0)
+                stream << ' ';
+            stream << std::setw(2) << static_cast<unsigned>(static_cast<unsigned char>(value[i]));
+        }
+        return stream.str();
+    };
 
     // Set up the the FileStruct table
     mFiles.reserve(filenum);
@@ -241,6 +269,12 @@ void BSAFile::readHeader(std::istream& input)
         fs.mHash = hashes[i];
         // Copy filename into FileStruct to avoid buffer invalidation issues
         fs.mName.assign(begin, nameSize);
+
+        if (i < 5)
+        {
+            Log(Debug::Info) << "BSA name[" << i << "] offset=" << nameOffset << " size=" << nameSize << " value='"
+                             << fs.mName << "' bytes=" << hexDump(std::string_view(begin, nameSize)) << '\n';
+        }
 
         mFiles.push_back(fs);
 
