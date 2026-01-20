@@ -165,11 +165,9 @@ void BSAFile::readHeader(std::istream& input)
             fail(std::format("Failed to read offsets: {}", std::generic_category().message(errno)));
     }
 
-    std::vector<uint32_t> offsetsSwapped;
     if constexpr (Misc::IS_BIG_ENDIAN)
     {
-        offsetsSwapped = offsets;
-        for (auto& offset : offsetsSwapped)
+        for (auto& offset : offsets)
             offset = Misc::fromLittleEndian(offset);
     }
 
@@ -204,70 +202,13 @@ void BSAFile::readHeader(std::istream& input)
     // (skipped)
     const std::streamsize fileDataOffset = 12 + dirsize + 8 * filenum;
 
-    const std::vector<uint32_t>* offsetsToUse = &offsets;
-    if constexpr (Misc::IS_BIG_ENDIAN)
-        offsetsToUse = &offsetsSwapped;
-
-    auto scoreOffsets = [&](const std::vector<uint32_t>& candidate)
-    {
-        std::size_t score = 0;
-        for (std::streamsize i = 0; i < filenum; ++i)
-        {
-            const uint32_t nameOffset = candidate[2 * filenum + i];
-            if (nameOffset >= mStringBuf.size())
-                continue;
-
-            const char* const begin = mStringBuf.data() + nameOffset;
-            const char* const end = reinterpret_cast<const char*>(
-                std::memchr(begin, '\0', mStringBuf.size() - nameOffset));
-            if (end == nullptr)
-                continue;
-
-            const std::size_t nameSize = end - begin;
-            if (nameSize == 0 || nameSize > 4096)
-                continue;
-
-            bool hasSeparator = false;
-            bool hasExtension = false;
-            bool printable = true;
-            for (std::size_t j = 0; j < nameSize; ++j)
-            {
-                const unsigned char ch = static_cast<unsigned char>(begin[j]);
-                if (ch < 0x20 || ch == 0x7F)
-                {
-                    printable = false;
-                    break;
-                }
-                if (ch == '\\' || ch == '/')
-                    hasSeparator = true;
-                if (ch == '.')
-                    hasExtension = true;
-            }
-
-            if (printable && hasExtension)
-                score += hasSeparator ? 2 : 1;
-        }
-        return score;
-    };
-
-    if constexpr (Misc::IS_BIG_ENDIAN)
-    {
-        const std::size_t swappedScore = scoreOffsets(offsetsSwapped);
-        const std::size_t rawScore = scoreOffsets(offsets);
-        if (rawScore > swappedScore)
-            offsetsToUse = &offsets;
-        else if (swappedScore == 0 && rawScore == 0)
-            fail("Failed to find valid filename offsets; BSA offsets table may be corrupted");
-    }
-
     // Set up the the FileStruct table
     mFiles.reserve(filenum);
     size_t endOfNameBuffer = 0;
     for (std::streamsize i = 0; i < filenum; i++)
     {
-        const uint32_t fileSize = (*offsetsToUse)[i * 2];
-        const std::streamsize offset
-            = static_cast<std::streamsize>((*offsetsToUse)[i * 2 + 1]) + fileDataOffset;
+        const uint32_t fileSize = offsets[i * 2];
+        const std::streamsize offset = static_cast<std::streamsize>(offsets[i * 2 + 1]) + fileDataOffset;
 
         if (fileSize + offset > fsize)
             fail(std::format("Archive contains offsets outside itself: {} + {} > {}", fileSize, offset, fsize));
@@ -276,7 +217,7 @@ void BSAFile::readHeader(std::istream& input)
             fail(std::format(
                 "Absolute file {} offset is too large: {} > {}", i, offset, std::numeric_limits<uint32_t>::max()));
 
-        const uint32_t nameOffset = (*offsetsToUse)[2 * filenum + i];
+        const uint32_t nameOffset = offsets[2 * filenum + i];
 
         if (nameOffset >= mStringBuf.size())
             fail("Archive contains names offset outside itself");
