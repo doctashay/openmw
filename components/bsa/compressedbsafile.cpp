@@ -269,10 +269,14 @@ namespace Bsa
                 FileStruct fileStruct{};
                 fileStruct.mFileSize = fileRecord.mSize & (~FileSizeFlag_Compression);
                 fileStruct.mOffset = fileRecord.mOffset;
-                fileStruct.mNameOffset = 0;
-                fileStruct.mNameSize
-                    = fileRecord.mName.empty() ? 0 : static_cast<uint32_t>(fileRecord.mName.size() - 1);
-                fileStruct.mNamesBuffer = &fileRecord.mName;
+                if (fileRecord.mName.empty())
+                {
+                    fileStruct.mName.clear();
+                }
+                else
+                {
+                    fileStruct.mName.assign(fileRecord.mName.data(), fileRecord.mName.size() - 1);
+                }
                 mFiles.push_back(fileStruct);
             }
         }

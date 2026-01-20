@@ -1,7 +1,6 @@
 #ifndef OPENMW_COMPONENTS_BSA_BA2GNRLFILE_HPP
 #define OPENMW_COMPONENTS_BSA_BA2GNRLFILE_HPP
 
-#include <list>
 #include <map>
 #include <string>
 #include <vector>
@@ -26,8 +25,6 @@ namespace Bsa
 
         using FolderRecord = std::map<std::pair<uint32_t, uint32_t>, FileRecord>;
         std::map<uint32_t, FolderRecord> mFolders;
-
-        std::list<std::vector<char>> mFileNames;
 
         FileRecord getFileRecord(std::string_view str) const;
 

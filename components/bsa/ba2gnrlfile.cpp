@@ -151,12 +151,9 @@ namespace Bsa
             // BA2 files are little-endian, convert on big-endian systems
             if constexpr (Misc::IS_BIG_ENDIAN)
                 fileNameSize = Misc::fromLittleEndian(fileNameSize);
-            fileName.resize(fileNameSize + 1);
+            fileName.resize(fileNameSize + 1, '\0');
             input.read(fileName.data(), fileNameSize);
-            mFileNames.push_back(std::move(fileName));
-            mFiles[i].mNameOffset = 0;
-            mFiles[i].mNameSize = fileNameSize;
-            mFiles[i].mNamesBuffer = &mFileNames.back();
+            mFiles[i].mName.assign(fileName.data(), fileNameSize);
         }
     }
 
