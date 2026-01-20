@@ -156,22 +156,14 @@ void BSAFile::readHeader(std::istream& input)
     if (filenum * 21 > fsize - 12 || dirsize + 8 * filenum > fsize - 12)
         fail("Directory information larger than entire archive");
 
-    // Read the offset info into a temporary buffer
-    // Use safe aligned reading - read into char buffer first, then memcpy
+    // Read the offset info element-by-element for alignment safety on PowerPC
     std::vector<uint32_t> offsets(3 * filenum);
-    alignas(uint32_t) std::vector<char> offsetBuffer(12 * filenum);
-    input.read(offsetBuffer.data(), 12 * filenum);
-
-    if (input.fail())
-        fail(std::format("Failed to read offsets: {}", std::generic_category().message(errno)));
-
-    // Copy to aligned vector using memcpy (safe for unaligned source)
-    std::memcpy(offsets.data(), offsetBuffer.data(), 12 * filenum);
-
-    // BSA files are little-endian, convert on big-endian systems
-    if constexpr (Misc::IS_BIG_ENDIAN)
+    for (auto& offset : offsets)
     {
-        for (auto& offset : offsets)
+        readAligned(input, offset);
+        if (input.fail())
+            fail(std::format("Failed to read offsets: {}", std::generic_category().message(errno)));
+        if constexpr (Misc::IS_BIG_ENDIAN)
             offset = Misc::fromLittleEndian(offset);
     }
 
@@ -186,21 +178,15 @@ void BSAFile::readHeader(std::istream& input)
     assert(input.tellg() == std::streampos(12 + dirsize));
     std::vector<Hash> hashes(filenum);
     static_assert(sizeof(Hash) == 8);
-    
-    // Use safe aligned reading for PowerPC compatibility
-    alignas(Hash) std::vector<char> hashBuffer(8 * filenum);
-    input.read(hashBuffer.data(), 8 * filenum);
 
-    if (input.fail())
-        fail(std::format("Failed to read hashes: {}", std::generic_category().message(errno)));
-
-    // Copy to aligned vector using memcpy (safe for unaligned source)
-    std::memcpy(hashes.data(), hashBuffer.data(), 8 * filenum);
-
-    // Hash values are little-endian, convert on big-endian systems
-    if constexpr (Misc::IS_BIG_ENDIAN)
+    // Read hashes element-by-element for alignment safety on PowerPC
+    for (auto& hash : hashes)
     {
-        for (auto& hash : hashes)
+        readAligned(input, hash.mLow);
+        readAligned(input, hash.mHigh);
+        if (input.fail())
+            fail(std::format("Failed to read hashes: {}", std::generic_category().message(errno)));
+        if constexpr (Misc::IS_BIG_ENDIAN)
         {
             hash.mLow = Misc::fromLittleEndian(hash.mLow);
             hash.mHigh = Misc::fromLittleEndian(hash.mHigh);
