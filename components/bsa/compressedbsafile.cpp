@@ -270,12 +270,13 @@ namespace Bsa
                 fileStruct.mFileSize = fileRecord.mSize & (~FileSizeFlag_Compression);
                 fileStruct.mOffset = fileRecord.mOffset;
                 if (fileRecord.mName.empty())
-                {
                     fileStruct.mName.clear();
-                }
                 else
                 {
-                    fileStruct.mName.assign(fileRecord.mName.data(), fileRecord.mName.size() - 1);
+                    std::size_t nameLength = fileRecord.mName.size();
+                    while (nameLength > 0 && fileRecord.mName[nameLength - 1] == '\0')
+                        --nameLength;
+                    fileStruct.mName.assign(fileRecord.mName.data(), nameLength);
                 }
                 mFiles.push_back(fileStruct);
             }

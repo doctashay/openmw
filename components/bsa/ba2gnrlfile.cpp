@@ -153,7 +153,10 @@ namespace Bsa
                 fileNameSize = Misc::fromLittleEndian(fileNameSize);
             fileName.resize(fileNameSize + 1, '\0');
             input.read(fileName.data(), fileNameSize);
-            mFiles[i].mName.assign(fileName.data(), fileNameSize);
+            std::size_t nameLength = fileNameSize;
+            while (nameLength > 0 && fileName[nameLength - 1] == '\0')
+                --nameLength;
+            mFiles[i].mName.assign(fileName.data(), nameLength);
         }
     }
 
