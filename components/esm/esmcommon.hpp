@@ -11,6 +11,8 @@
 #include <type_traits>
 #include <vector>
 
+#include <components/misc/endianness.hpp>
+
 // strnlen might not be available on macOS 10.5 - provide fallback
 // Check if we're building for macOS 10.5 (deployment target < 10.7)
 #if defined(__APPLE__) && defined(MAC_OS_X_VERSION_MIN_REQUIRED) && MAC_OS_X_VERSION_MIN_REQUIRED < 1070
@@ -93,7 +95,7 @@ namespace ESM
             static_assert(capacity == sizeof(std::uint32_t));
             std::uint32_t value;
             std::memcpy(&value, mData, capacity);
-            return value;
+            return Misc::fromLittleEndian(value);
         }
 
         void clear() noexcept { std::memset(mData, 0, capacity); }
