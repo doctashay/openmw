@@ -565,7 +565,7 @@ endif()
 
 include_directories(${BULLET_INCLUDE_DIRS} ${CMAKE_CURRENT_BINARY_DIR})
 
-find_package (SQLite3 REQUIRED)
+find_package(SQLite3 REQUIRED)
 
 # PowerPC: link atomic function support
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "ppc|powerpc" OR CMAKE_OSX_ARCHITECTURES MATCHES "ppc")
