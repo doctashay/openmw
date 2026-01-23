@@ -565,54 +565,11 @@ endif()
 
 include_directories(${BULLET_INCLUDE_DIRS} ${CMAKE_CURRENT_BINARY_DIR})
 
-if(OPENMW_USE_SYSTEM_SQLITE3)
-    find_package(SQLite3 QUIET)
-    if(NOT SQLite3_FOUND)
-        message(STATUS "System SQLite3 not found, will build internally")
-        set(OPENMW_USE_SYSTEM_SQLITE3 OFF)
-    endif()
-endif()
-if(NOT OPENMW_USE_SYSTEM_SQLITE3)
-    # SQLite3 will be built internally via extern/CMakeLists.txt
-    # The extern/CMakeLists.txt sets SQLite3_INCLUDE_DIR and SQLite3_LIBRARY
-    # So we don't need to find it here
-else()
-    find_package(SQLite3 REQUIRED)
-endif()
+find_package (SQLite3 REQUIRED)
 
-# PowerPC may need libatomic for 64-bit atomic operations
-# Check before creating library so we can add fallback source if needed
+# PowerPC: link atomic function support
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "ppc|powerpc" OR CMAKE_OSX_ARCHITECTURES MATCHES "ppc")
-    # Try multiple possible names/locations for libatomic
-    find_library(ATOMIC_LIB 
-        NAMES atomic libatomic
-        PATHS 
-            /opt/local/lib
-            /usr/local/lib
-            /usr/lib
-            ${CMAKE_C_COMPILER}/../lib
-            ${CMAKE_C_COMPILER}/../lib/gcc/${CMAKE_C_COMPILER_TARGET}/*/
-    )
-    
-    if(ATOMIC_LIB)
-        # Store for use by executables
-        set(OPENMW_ATOMIC_LIB ${ATOMIC_LIB} CACHE INTERNAL "libatomic library for PowerPC")
-        message(STATUS "Found libatomic for PowerPC atomic operations: ${ATOMIC_LIB}")
-    else()
-        # libatomic not found - use mutex-based fallback
-        message(STATUS "libatomic not found - using mutex-based fallback for atomic operations")
-        message(STATUS "Note: This is slower but ensures correctness on PowerPC")
-        # Add the fallback implementation to components
-        list(APPEND COMPONENT_FILES "${OpenMW_SOURCE_DIR}/components/misc/atomic_fallback.cpp")
-    endif()
-    
-    # Add malloc alignment fix for PowerPC (workaround for Boost alignment issues)
-    # This must be linked early to intercept malloc/free calls
-    # DISABLED: Using OS malloc instead to debug endianness issues
-    # if(APPLE AND (CMAKE_OSX_ARCHITECTURES MATCHES "ppc" OR OPENMW_POWERPC_BUILD))
-    #     list(APPEND COMPONENT_FILES "${OpenMW_SOURCE_DIR}/components/misc/malloc_alignment_fix.cpp")
-    #     message(STATUS "Added malloc alignment fix for PowerPC (Boost workaround)")
-    # endif()
+    target_link_libraries(components atomic) 
 endif()
 
 add_library(components STATIC ${COMPONENT_FILES})
@@ -663,11 +620,6 @@ target_link_libraries(components
     ZLIB::ZLIB
     )
 
-# Link libatomic if found (fallback was already added to COMPONENT_FILES if not found)
-if(OPENMW_ATOMIC_LIB)
-    target_link_libraries(components ${OPENMW_ATOMIC_LIB})
-    message(STATUS "Linking libatomic for PowerPC atomic operations: ${OPENMW_ATOMIC_LIB}")
-endif()
 
 if(yaml-cpp_VERSION VERSION_GREATER_EQUAL 0.8.0)
     target_link_libraries(components yaml-cpp::yaml-cpp)
