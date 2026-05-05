@@ -1680,6 +1680,13 @@ if (OPENMW_OSX_DEPLOYMENT AND APPLE)
     INSTALL(FILES "${OpenMW_SOURCE_DIR}/README.md" DESTINATION "/${INSTALLED_OPENMW_APP}/..")
     INSTALL(FILES "${OpenMW_SOURCE_DIR}/LICENSE" DESTINATION "/${INSTALLED_OPENMW_APP}/..")
     INSTALL(FILES "${OpenMW_SOURCE_DIR}/AUTHORS.md" DESTINATION "/${INSTALLED_OPENMW_APP}/..")
+    INSTALL(FILES "${OpenMW_SOURCE_DIR}/scripts/openmw_folder_wizard.py" DESTINATION "/${INSTALLED_OPENMW_APP}/..")
+    INSTALL(FILES "${OpenMW_SOURCE_DIR}/files/mac/openmw-folder-wizard.command"
+        DESTINATION "/${INSTALLED_OPENMW_APP}/.."
+        RENAME "OpenMW Folder Wizard.command")
+    INSTALL(PROGRAMS "${OpenMW_SOURCE_DIR}/files/mac/First Time Setup.command"
+        DESTINATION "/${INSTALLED_OPENMW_APP}/.."
+        RENAME "First Time Setup.command")
 
     if (USE_QT)
         set(PLUGINS ${PLUGINS} "${INSTALLED_OPENMW_APP}/Contents/PlugIns/${QT_COCOA_PLUGIN_GROUP}/${QT_COCOA_PLUGIN_NAME}")

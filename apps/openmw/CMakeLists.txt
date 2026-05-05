@@ -253,21 +253,39 @@ if(APPLE AND BUILD_OPENMW)
     configure_file("${OpenMW_BINARY_DIR}/defaults.bin" ${BUNDLE_RESOURCES_DIR} COPYONLY)
     configure_file("${OpenMW_BINARY_DIR}/openmw.cfg" ${BUNDLE_RESOURCES_DIR} COPYONLY)
     configure_file("${OpenMW_BINARY_DIR}/gamecontrollerdb.txt" ${BUNDLE_RESOURCES_DIR} COPYONLY)
+    configure_file("${OpenMW_SOURCE_DIR}/scripts/openmw_folder_wizard.py" "${BUNDLE_RESOURCES_DIR}/openmw_folder_wizard.py" COPYONLY)
+    configure_file("${OpenMW_SOURCE_DIR}/files/mac/openmw-folder-wizard.command"
+        "${BUNDLE_RESOURCES_DIR}/OpenMW Folder Wizard.command" COPYONLY)
+    configure_file("${OpenMW_SOURCE_DIR}/files/mac/First Time Setup.applescript"
+        "${BUNDLE_RESOURCES_DIR}/First Time Setup.applescript" COPYONLY)
 
     add_custom_command(TARGET openmw
         POST_BUILD
-        COMMAND cp "${OpenMW_BINARY_DIR}/resources/version" "${BUNDLE_RESOURCES_DIR}/resources")
+        COMMAND cp "${OpenMW_BINARY_DIR}/resources/version" "${BUNDLE_RESOURCES_DIR}/resources"
+        COMMAND cp "${OpenMW_SOURCE_DIR}/files/mac/First Time Setup.command" "${APP_BUNDLE_DIR}/../First Time Setup.command"
+        COMMAND chmod +x "${APP_BUNDLE_DIR}/../First Time Setup.command")
 
     find_library(COCOA_FRAMEWORK Cocoa)
     find_library(IOKIT_FRAMEWORK IOKit)
     target_link_libraries(openmw ${COCOA_FRAMEWORK} ${IOKIT_FRAMEWORK})
 
     if (FFmpeg_FOUND)
-        target_link_options(openmw PRIVATE "LINKER:SHELL:-framework CoreVideo"
-                                           "LINKER:SHELL:-framework CoreMedia"
-                                           "LINKER:SHELL:-framework VideoToolbox"
-                                           "LINKER:SHELL:-framework AudioToolbox"
-                                           "LINKER:SHELL:-framework VideoDecodeAcceleration")
+        if (CMAKE_OSX_DEPLOYMENT_TARGET)
+            if (CMAKE_OSX_DEPLOYMENT_TARGET VERSION_GREATER_EQUAL "10.7")
+                target_link_options(openmw PRIVATE "LINKER:SHELL:-framework CoreVideo"
+                                                   "LINKER:SHELL:-framework CoreMedia"
+                                                   "LINKER:SHELL:-framework VideoToolbox"
+                                                   "LINKER:SHELL:-framework AudioToolbox"
+                                                   "LINKER:SHELL:-framework VideoDecodeAcceleration")
+            endif()
+        else()
+            message(STATUS "Skipping CoreMedia/CoreVideo/VideoToolbox frameworks (not available on macOS 10.5)")
+        endif()
+    endif()
+
+    if (OPENMW_MACOSX_10_5 OR OPENMW_POWERPC_BUILD)
+        set_target_properties(openmw PROPERTIES BUILD_RPATH "/opt/local/lib")
+        message(STATUS "Adding BUILD_RPATH /opt/local/lib for Mesa libgallium")
     endif()
 endif()
 
