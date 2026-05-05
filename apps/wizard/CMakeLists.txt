@@ -72,7 +72,11 @@ target_link_libraries(openmw-wizard
     components_qt
 )
 
-target_link_libraries(openmw-wizard Qt::Widgets Qt::Core Qt::Svg)
+if(USE_QT4)
+    target_link_libraries(openmw-wizard ${QT_QTCORE_LIBRARY} ${QT_QTGUI_LIBRARY} ${QT_QTSVG_LIBRARY})
+else()
+    target_link_libraries(openmw-wizard Qt::Widgets Qt::Core Qt::Svg)
+endif()
 
 if (OPENMW_USE_UNSHIELD)
     target_link_libraries(openmw-wizard ${LIBUNSHIELD_LIBRARIES})

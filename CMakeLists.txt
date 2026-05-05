@@ -68,6 +68,80 @@ if (APPLE)
     set(APP_BUNDLE_NAME "${CMAKE_PROJECT_NAME}.app")
 
     set(APP_BUNDLE_DIR "${OpenMW_BINARY_DIR}/${APP_BUNDLE_NAME}")
+    
+    # macOS 10.5 Leopard and PowerPC support
+    option(OPENMW_MACOSX_10_5_BUILD "Build for macOS 10.5 Leopard" OFF)
+    option(OPENMW_POWERPC_BUILD "Build for PowerPC architecture" OFF)
+    
+    # Auto-detect if deployment target is 10.5 or earlier
+    if(CMAKE_OSX_DEPLOYMENT_TARGET)
+        if(CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS "10.6")
+            set(OPENMW_MACOSX_10_5 TRUE)
+            message(STATUS "Detected macOS 10.5 build (deployment target: ${CMAKE_OSX_DEPLOYMENT_TARGET})")
+        endif()
+    endif()
+    
+    # Check for PowerPC architecture
+    if(CMAKE_OSX_ARCHITECTURES)
+        string(TOUPPER "${CMAKE_OSX_ARCHITECTURES}" ARCH_UPPER)
+        if(ARCH_UPPER MATCHES "PPC|POWERPC")
+            set(OPENMW_POWERPC_BUILD TRUE)
+            message(STATUS "Detected PowerPC architecture: ${CMAKE_OSX_ARCHITECTURES}")
+        endif()
+    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "powerpc|ppc")
+        set(OPENMW_POWERPC_BUILD TRUE)
+        message(STATUS "Detected PowerPC architecture from system processor")
+    endif()
+    
+    # Explicit override options
+    if(OPENMW_MACOSX_10_5_BUILD)
+        set(OPENMW_MACOSX_10_5 TRUE)
+    endif()
+    
+    if(OPENMW_MACOSX_10_5)
+        message(STATUS "Configuring for macOS 10.5 Leopard")
+        
+        # Force deployment target to 10.5
+        if(NOT CMAKE_OSX_DEPLOYMENT_TARGET)
+            set(CMAKE_OSX_DEPLOYMENT_TARGET "10.5" CACHE STRING "macOS deployment target" FORCE)
+        elseif(CMAKE_OSX_DEPLOYMENT_TARGET VERSION_GREATER "10.5")
+            message(WARNING "Deployment target ${CMAKE_OSX_DEPLOYMENT_TARGET} is newer than 10.5, forcing to 10.5")
+            set(CMAKE_OSX_DEPLOYMENT_TARGET "10.5" CACHE STRING "macOS deployment target" FORCE)
+        endif()
+        
+        # SDK path configuration
+        if(DEFINED ENV{MACOSX_SDK_PATH})
+            set(CMAKE_OSX_SYSROOT "$ENV{MACOSX_SDK_PATH}" CACHE PATH "macOS SDK path")
+        elseif(EXISTS "/Developer/SDKs/MacOSX10.5.sdk")
+            set(CMAKE_OSX_SYSROOT "/Developer/SDKs/MacOSX10.5.sdk" CACHE PATH "macOS SDK path")
+        elseif(EXISTS "/Developer/SDKs/MacOSX10.5.sdk")
+            set(CMAKE_OSX_SYSROOT "/Developer/SDKs/MacOSX10.5.sdk" CACHE PATH "macOS SDK path")
+        elseif(EXISTS "/opt/local/libexec/SDKs/MacOSX10.5.sdk")
+            set(CMAKE_OSX_SYSROOT "/opt/local/libexec/SDKs/MacOSX10.5.sdk" CACHE PATH "macOS SDK path")
+        else()
+            message(WARNING "macOS 10.5 SDK not found. Please set MACOSX_SDK_PATH environment variable")
+        endif()
+        
+        if(CMAKE_OSX_SYSROOT)
+            message(STATUS "Using macOS SDK: ${CMAKE_OSX_SYSROOT}")
+        endif()
+        
+        # Compiler flags for 10.5
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mmacosx-version-min=10.5")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mmacosx-version-min=10.5")
+        
+        # Define macros for 10.5 API availability
+        add_definitions(-DMAC_OS_X_VERSION_MIN_REQUIRED=1050)
+        add_definitions(-DMAC_OS_X_VERSION_MAX_ALLOWED=1050)
+    endif()
+    
+    if(OPENMW_POWERPC_BUILD)
+        message(STATUS "Building for PowerPC architecture")
+        if(NOT CMAKE_OSX_ARCHITECTURES)
+            # Default to 32-bit PowerPC for 10.5
+            set(CMAKE_OSX_ARCHITECTURES "ppc" CACHE STRING "macOS architectures" FORCE)
+        endif()
+    endif()
 endif (APPLE)
 
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/)
@@ -249,9 +323,28 @@ endif()
 find_package(LZ4 REQUIRED)
 
 if (USE_QT)
-    find_package(QT REQUIRED COMPONENTS Core NAMES Qt6)
-    find_package(Qt6 COMPONENTS Core Widgets Network OpenGL OpenGLWidgets LinguistTools Svg REQUIRED)
-    message(STATUS "Using Qt${QT_VERSION}")
+    # Qt version selection for macOS 10.5
+    option(OPENMW_QT_VERSION "Qt version to use (4 or 6)" 6)
+    
+    if(OPENMW_MACOSX_10_5)
+        # macOS 10.5 requires Qt4
+        set(OPENMW_QT_VERSION 4 CACHE STRING "Qt version" FORCE)
+        message(STATUS "macOS 10.5 detected: forcing Qt4")
+    endif()
+    
+    if(OPENMW_QT_VERSION EQUAL 4)
+        find_package(Qt4 REQUIRED COMPONENTS QtCore QtGui QtOpenGL QtNetwork QtSvg)
+        set(QT_VERSION_MAJOR 4)
+        set(USE_QT4 TRUE CACHE BOOL "Using Qt4" FORCE)
+        message(STATUS "Using Qt4")
+    else()
+        find_package(QT REQUIRED COMPONENTS Core NAMES Qt6)
+        find_package(Qt6 COMPONENTS Core Widgets Network OpenGL OpenGLWidgets LinguistTools Svg REQUIRED)
+        set(USE_QT4 FALSE CACHE BOOL "Using Qt4" FORCE)
+        message(STATUS "Using Qt${QT_VERSION}")
+    endif()
+else()
+    set(USE_QT4 FALSE CACHE BOOL "Using Qt4" FORCE)
 endif()
 
 set(USED_OSG_COMPONENTS
@@ -285,7 +378,10 @@ if(NOT COLLADA_DOM_VERSION_MINOR)
     set(COLLADA_DOM_VERSION_MINOR 5)
 endif()
 
-find_package(collada_dom 2.5)
+find_package(collada_dom 2.5 QUIET)
+if(NOT collada_dom_FOUND)
+    message(STATUS "collada_dom not found - some features may be unavailable")
+endif()
 
 option(OPENMW_USE_SYSTEM_ICU "Use system ICU library instead of internal. If disabled, requires autotools" ON)
 if(OPENMW_USE_SYSTEM_ICU)
@@ -295,13 +391,16 @@ endif()
 option(OPENMW_USE_SYSTEM_YAML_CPP "Use system yaml-cpp library instead of internal." ON)
 if(OPENMW_USE_SYSTEM_YAML_CPP)
     set(_yaml_cpp_static_default OFF)
+    find_package(yaml-cpp QUIET)
+    if(NOT yaml-cpp_FOUND)
+        message(STATUS "System yaml-cpp not found, will build internally")
+        set(OPENMW_USE_SYSTEM_YAML_CPP OFF)
+        set(_yaml_cpp_static_default ON)
+    endif()
 else()
     set(_yaml_cpp_static_default ON)
 endif()
 option(YAML_CPP_STATIC "Link static build of yaml-cpp into the binaries" ${_yaml_cpp_static_default})
-if (OPENMW_USE_SYSTEM_YAML_CPP)
-    find_package(yaml-cpp REQUIRED)
-endif()
 
 if ((BUILD_COMPONENTS_TESTS OR BUILD_OPENCS_TESTS OR BUILD_OPENMW_TESTS) AND OPENMW_USE_SYSTEM_GOOGLETEST)
     find_package(GTest 1.10 REQUIRED)
@@ -394,24 +493,34 @@ if(OPENMW_USE_SYSTEM_BULLET)
     if (BULLET_FOUND)
         string(REPLACE "." "" _bullet_version_num ${BULLET_VERSION_STRING})
         if (_bullet_version_num VERSION_LESS REQUIRED_BULLET_VERSION)
-            message(FATAL_ERROR "System bullet version too old, OpenMW requires at least ${REQUIRED_BULLET_VERSION}, got ${_bullet_version_num}")
+            message(WARNING "System bullet version too old (${_bullet_version_num}), required ${REQUIRED_BULLET_VERSION}. Falling back to internal build.")
+            set(OPENMW_USE_SYSTEM_BULLET OFF)
+        else()
+            # Fix the relative include:
+            set(BULLET_INCLUDE_DIRS "${BULLET_ROOT_DIR}/${BULLET_INCLUDE_DIRS}")
+            include(FindPackageMessage)
+            find_package_message(Bullet "Found Bullet: ${BULLET_LIBRARIES} ${BULLET_VERSION_STRING}" "${BULLET_VERSION_STRING}-float64")
         endif()
-        # Fix the relative include:
-        set(BULLET_INCLUDE_DIRS "${BULLET_ROOT_DIR}/${BULLET_INCLUDE_DIRS}")
-        include(FindPackageMessage)
-        find_package_message(Bullet "Found Bullet: ${BULLET_LIBRARIES} ${BULLET_VERSION_STRING}" "${BULLET_VERSION_STRING}-float64")
     else()
-        find_package(Bullet ${REQUIRED_BULLET_VERSION} REQUIRED COMPONENTS BulletCollision LinearMath)
+        # Try standard find_package
+        find_package(Bullet ${REQUIRED_BULLET_VERSION} QUIET COMPONENTS BulletCollision LinearMath)
+        if(NOT BULLET_FOUND)
+            message(STATUS "System Bullet not found, will build internally")
+            set(OPENMW_USE_SYSTEM_BULLET OFF)
+        endif()
     endif()
 
-    # Only link the Bullet libraries that we need:
-    string(REGEX MATCHALL "((optimized|debug);)?[^;]*(BulletCollision|LinearMath)[^;]*" BULLET_LIBRARIES "${BULLET_LIBRARIES}")
+    if(OPENMW_USE_SYSTEM_BULLET)
+        # Only link the Bullet libraries that we need:
+        string(REGEX MATCHALL "((optimized|debug);)?[^;]*(BulletCollision|LinearMath)[^;]*" BULLET_LIBRARIES "${BULLET_LIBRARIES}")
 
-    include(cmake/CheckBulletPrecision.cmake)
-    if (HAS_DOUBLE_PRECISION_BULLET)
-        message(STATUS "Bullet uses double precision")
-    else()
-        message(FATAL_ERROR "Bullet does not uses double precision")
+        include(cmake/CheckBulletPrecision.cmake)
+        if (HAS_DOUBLE_PRECISION_BULLET)
+            message(STATUS "Bullet uses double precision")
+        else()
+            message(WARNING "Bullet does not use double precision. Falling back to internal build.")
+            set(OPENMW_USE_SYSTEM_BULLET OFF)
+        endif()
     endif()
 endif()
 
@@ -434,14 +543,27 @@ if(NOT HAVE_STDINT_H)
 endif()
 
 if(OPENMW_USE_SYSTEM_OSG)
-    find_package(OpenSceneGraph 3.6.5 REQUIRED ${USED_OSG_COMPONENTS})  # Bump to 3.6.6 when released
+    find_package(OpenSceneGraph 3.6.5 QUIET ${USED_OSG_COMPONENTS})  # Bump to 3.6.6 when released
 
-    if(OSG_STATIC)
-        find_package(OSGPlugins REQUIRED COMPONENTS ${USED_OSG_PLUGINS})
+    if(NOT OpenSceneGraph_FOUND)
+        message(STATUS "System OpenSceneGraph not found, will build internally")
+        set(OPENMW_USE_SYSTEM_OSG OFF)
+        set(_osg_static_default ON)
+    else()
+        if(OSG_STATIC)
+            find_package(OSGPlugins QUIET COMPONENTS ${USED_OSG_PLUGINS})
+            if(NOT OSGPlugins_FOUND)
+                message(STATUS "System OSGPlugins not found, will build OSG internally")
+                set(OPENMW_USE_SYSTEM_OSG OFF)
+                set(_osg_static_default ON)
+            endif()
+        endif()
     endif()
 endif()
 
-include_directories(BEFORE SYSTEM ${OPENSCENEGRAPH_INCLUDE_DIRS})
+if(OPENMW_USE_SYSTEM_OSG)
+    include_directories(BEFORE SYSTEM ${OPENSCENEGRAPH_INCLUDE_DIRS})
+endif()
 
 if(OSG_STATIC)
     add_definitions(-DOSG_LIBRARY_STATIC)
@@ -457,7 +579,12 @@ set(BOOST_COMPONENTS iostreams program_options)
 find_package(Boost 1.70.0 CONFIG REQUIRED COMPONENTS ${BOOST_COMPONENTS} OPTIONAL_COMPONENTS ${BOOST_OPTIONAL_COMPONENTS})
 
 if(OPENMW_USE_SYSTEM_MYGUI)
-    find_package(MyGUI 3.4.3 REQUIRED)
+    find_package(MyGUI 3.4.3 QUIET)
+    if(NOT MyGUI_FOUND)
+        message(STATUS "System MyGUI not found, will build internally")
+        set(OPENMW_USE_SYSTEM_MYGUI OFF)
+        set(_mygui_static_default ON)
+    endif()
 endif()
 find_package(SDL2 2.0.20 REQUIRED)
 find_package(OpenAL REQUIRED)
@@ -482,7 +609,6 @@ set(SOL_CONFIG_DIR ${OpenMW_SOURCE_DIR}/extern/sol_config)
 
 include_directories(
     BEFORE SYSTEM
-    ${MyGUI_INCLUDE_DIRS}
     ${OPENAL_INCLUDE_DIR}
     ${OPENGL_INCLUDE_DIR}
     ${BULLET_INCLUDE_DIRS}
@@ -491,6 +617,9 @@ include_directories(
     ${SOL_CONFIG_DIR}
     ${ICU_INCLUDE_DIRS}
 )
+if(OPENMW_USE_SYSTEM_MYGUI AND MyGUI_INCLUDE_DIRS)
+    include_directories(BEFORE SYSTEM ${MyGUI_INCLUDE_DIRS})
+endif()
 include_directories(".")
 
 link_directories(${COLLADA_DOM_LIBRARY_DIRS})
@@ -584,8 +713,26 @@ if(OPENMW_LTO_BUILD)
 endif()
 
 if (APPLE)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
+    if(OPENMW_MACOSX_10_5)
+        # macOS 10.5: libc++ was introduced in 10.7, but GCC 14 might require it
+        # Try to detect if libc++ is available, otherwise fall back to libstdc++
+        include(CheckCXXCompilerFlag)
+        check_cxx_compiler_flag("-stdlib=libc++" HAS_LIBCXX)
+        
+        if(HAS_LIBCXX)
+            message(STATUS "Using libc++ for macOS 10.5 (GCC 14 compatibility)")
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
+            set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
+        else()
+            message(STATUS "libc++ not available, using libstdc++ for macOS 10.5")
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libstdc++")
+            set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libstdc++")
+        endif()
+    else()
+        # Modern macOS: use libc++
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
+    endif()
 endif()
 
 # Extern
