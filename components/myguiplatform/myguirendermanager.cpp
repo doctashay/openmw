@@ -322,6 +322,15 @@ namespace MyGUIPlatform
 
     void OSGVertexBuffer::unlock()
     {
+        if constexpr (Misc::IS_BIG_ENDIAN)
+        {
+            constexpr size_t colourOffset = 12; // matches glColorPointer offset in Vertex
+            osg::UByteArray* array = mVertexArray[mCurrentBuffer];
+            const size_t vertexSize = sizeof(MyGUI::Vertex);
+            const size_t n = array->size() / vertexSize;
+            auto* colourBytes = static_cast<void*>(&(*array)[colourOffset]);
+            Misc::swapEndian32BufferInplaceStrided(colourBytes, n, vertexSize);
+        }
         mVertexArray[mCurrentBuffer]->dirty();
         mBuffer[mCurrentBuffer]->dirty();
     }

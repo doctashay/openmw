@@ -1,12 +1,44 @@
 #ifndef COMPONENTS_MISC_ENDIANNESS_H
 #define COMPONENTS_MISC_ENDIANNESS_H
 
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <type_traits>
 
+#if defined(OPENMW_HAVE_ALTIVEC)
+#include <altivec.h>
+#ifdef bool
+#undef bool
+#endif
+#ifdef vector
+#undef vector
+#endif
+#ifdef pixel
+#undef pixel
+#endif
+#endif
+
 namespace Misc
 {
+    namespace Detail
+    {
+#if defined(OPENMW_HAVE_ALTIVEC)
+        using ByteVector = __vector unsigned char;
+
+        inline ByteVector loadByteVector(const void* data)
+        {
+            ByteVector result;
+            std::memcpy(&result, data, sizeof(result));
+            return result;
+        }
+
+        inline void storeByteVector(void* data, ByteVector value)
+        {
+            std::memcpy(data, &value, sizeof(value));
+        }
+#endif
+    }
 
     // Two-way conversion little-endian <-> big-endian
     template <typename T>
@@ -37,6 +69,97 @@ namespace Misc
                 | ((v64 & 0x0000'00ff'0000'0000) >> 8) | ((v64 & 0x0000'0000'ff00'0000) << 8)
                 | ((v64 & 0x0000'0000'00ff'0000) << 24) | ((v64 & 0x0000'0000'0000'ff00) << 40) | (v64 << 56);
             std::memcpy(&v, &v64, sizeof(T));
+        }
+    }
+
+    inline void swapEndian16BufferInplace(void* data, std::size_t count)
+    {
+        auto* bytes = static_cast<unsigned char*>(data);
+#if defined(OPENMW_HAVE_ALTIVEC)
+        const Detail::ByteVector mask
+            = (__vector unsigned char){ 1, 0, 3, 2, 5, 4, 7, 6, 9, 8, 11, 10, 13, 12, 15, 14 };
+        std::size_t i = 0;
+        for (; i + 8 <= count; i += 8, bytes += sizeof(Detail::ByteVector))
+        {
+            const Detail::ByteVector value = Detail::loadByteVector(bytes);
+            Detail::storeByteVector(bytes, vec_perm(value, value, mask));
+        }
+#else
+        std::size_t i = 0;
+#endif
+        for (; i < count; ++i, bytes += sizeof(std::uint16_t))
+        {
+            std::uint16_t value;
+            std::memcpy(&value, bytes, sizeof(value));
+            swapEndiannessInplace(value);
+            std::memcpy(bytes, &value, sizeof(value));
+        }
+    }
+
+    inline void swapEndian32BufferInplace(void* data, std::size_t count)
+    {
+        auto* bytes = static_cast<unsigned char*>(data);
+#if defined(OPENMW_HAVE_ALTIVEC)
+        const Detail::ByteVector mask
+            = (__vector unsigned char){ 3, 2, 1, 0, 7, 6, 5, 4, 11, 10, 9, 8, 15, 14, 13, 12 };
+        std::size_t i = 0;
+        for (; i + 4 <= count; i += 4, bytes += sizeof(Detail::ByteVector))
+        {
+            const Detail::ByteVector value = Detail::loadByteVector(bytes);
+            Detail::storeByteVector(bytes, vec_perm(value, value, mask));
+        }
+#else
+        std::size_t i = 0;
+#endif
+        for (; i < count; ++i, bytes += sizeof(std::uint32_t))
+        {
+            std::uint32_t value;
+            std::memcpy(&value, bytes, sizeof(value));
+            swapEndiannessInplace(value);
+            std::memcpy(bytes, &value, sizeof(value));
+        }
+    }
+
+    inline void swapEndian32BufferInplaceStrided(void* data, std::size_t count, std::size_t stride)
+    {
+        if (stride == sizeof(std::uint32_t))
+        {
+            swapEndian32BufferInplace(data, count);
+            return;
+        }
+
+        auto* bytes = static_cast<unsigned char*>(data);
+        for (std::size_t i = 0; i < count; ++i, bytes += stride)
+        {
+            std::uint32_t value;
+            std::memcpy(&value, bytes, sizeof(value));
+            swapEndiannessInplace(value);
+            std::memcpy(bytes, &value, sizeof(value));
+        }
+    }
+
+    template <typename T>
+    void swapEndiannessBulkInplace(T* data, std::size_t count)
+    {
+        static_assert(std::is_arithmetic_v<T>);
+        static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4 || sizeof(T) == 8);
+
+        if constexpr (sizeof(T) == 1)
+        {
+            return;
+        }
+        else if constexpr (sizeof(T) == 2)
+        {
+            swapEndian16BufferInplace(data, count);
+        }
+        else if constexpr (sizeof(T) == 4)
+        {
+            swapEndian32BufferInplace(data, count);
+        }
+        else
+        {
+            for (std::size_t i = 0; i < count; ++i)
+                swapEndiannessInplace(data[i]);
         }
     }
 
