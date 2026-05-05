@@ -2,6 +2,7 @@
 
 #include <components/debug/debuglog.hpp>
 #include <components/misc/concepts.hpp>
+#include <components/misc/endianness.hpp>
 
 #include "esmreader.hpp"
 #include "esmwriter.hpp"
@@ -56,6 +57,13 @@ namespace ESM
                     break;
                 case fourCC("NPDT"):
                     esm.getSubComposite(mData);
+                    if constexpr (Misc::IS_BIG_ENDIAN)
+                    {
+                        for (auto& v : mData.mAttributes)
+                            v = Misc::fromLittleEndian(v);
+                        for (auto& v : mData.mAttack)
+                            v = Misc::fromLittleEndian(v);
+                    }
                     hasNpdt = true;
                     break;
                 case fourCC("FLAG"):

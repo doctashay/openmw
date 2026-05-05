@@ -4,6 +4,7 @@
 #include "esmwriter.hpp"
 
 #include <components/esm/attr.hpp>
+#include <components/misc/endianness.hpp>
 
 namespace ESM
 {
@@ -38,6 +39,9 @@ namespace ESM
             esm.getT(bonus.mBonus);
         }
         esm.getT(mAttributeValues);
+        if constexpr (Misc::IS_BIG_ENDIAN)
+            for (auto& v : mAttributeValues)
+                v = Misc::fromLittleEndian(v);
         esm.getT(mMaleHeight);
         esm.getT(mFemaleHeight);
         esm.getT(mMaleWeight);

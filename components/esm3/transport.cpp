@@ -1,6 +1,7 @@
 #include "transport.hpp"
 
 #include <components/debug/debuglog.hpp>
+#include <components/misc/endianness.hpp>
 
 #include <components/esm3/esmreader.hpp>
 #include <components/esm3/esmwriter.hpp>
@@ -14,6 +15,13 @@ namespace ESM
         {
             Dest dodt;
             esm.getSubComposite(dodt.mPos);
+            if constexpr (Misc::IS_BIG_ENDIAN)
+            {
+                for (float& v : dodt.mPos.pos)
+                    v = Misc::fromLittleEndian(v);
+                for (float& v : dodt.mPos.rot)
+                    v = Misc::fromLittleEndian(v);
+            }
             mList.push_back(std::move(dodt));
         }
         else if (esm.retSubName().toInt() == fourCC("DNAM"))

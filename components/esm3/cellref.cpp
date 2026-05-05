@@ -4,6 +4,7 @@
 #include <limits>
 
 #include <components/debug/debuglog.hpp>
+#include <components/misc/endianness.hpp>
 
 #include "esmreader.hpp"
 #include "esmwriter.hpp"
@@ -113,6 +114,13 @@ namespace ESM
                         if constexpr (load)
                         {
                             esm.getSubComposite(cellRef.mDoorDest);
+                            if constexpr (Misc::IS_BIG_ENDIAN)
+                            {
+                                for (float& v : cellRef.mDoorDest.pos)
+                                    v = Misc::fromLittleEndian(v);
+                                for (float& v : cellRef.mDoorDest.rot)
+                                    v = Misc::fromLittleEndian(v);
+                            }
                             cellRef.mTeleport = true;
                         }
                         else
@@ -132,7 +140,16 @@ namespace ESM
                         break;
                     case fourCC("DATA"):
                         if constexpr (load)
+                        {
                             esm.getSubComposite(cellRef.mPos);
+                            if constexpr (Misc::IS_BIG_ENDIAN)
+                            {
+                                for (float& v : cellRef.mPos.pos)
+                                    v = Misc::fromLittleEndian(v);
+                                for (float& v : cellRef.mPos.rot)
+                                    v = Misc::fromLittleEndian(v);
+                            }
+                        }
                         else
                             esm.skipHSub();
                         break;

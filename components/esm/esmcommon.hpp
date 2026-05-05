@@ -11,6 +11,7 @@
 #include <type_traits>
 #include <vector>
 
+#include <components/misc/endianness.hpp>
 namespace ESM
 {
     enum RecordFlag
@@ -80,7 +81,7 @@ namespace ESM
             static_assert(capacity == sizeof(std::uint32_t));
             std::uint32_t value;
             std::memcpy(&value, mData, capacity);
-            return value;
+            return Misc::fromLittleEndian(value);
         }
 
         void clear() noexcept { std::memset(mData, 0, capacity); }

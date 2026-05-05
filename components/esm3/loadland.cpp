@@ -7,6 +7,7 @@
 
 #include <components/esm/defs.hpp>
 #include <components/misc/concepts.hpp>
+#include <components/misc/endianness.hpp>
 
 #include "esmreader.hpp"
 #include "esmwriter.hpp"
@@ -355,7 +356,12 @@ namespace ESM
         {
             std::uint16_t vtex[LandRecordData::sLandNumTextures];
             if (condLoad(reader, dataTypes, data.mDataLoaded, Land::DATA_VTEX, vtex))
+            {
+                if constexpr (Misc::IS_BIG_ENDIAN)
+                    for (auto& v : vtex)
+                        v = Misc::fromLittleEndian(v);
                 transposeTextureData(vtex, data.mTextures.data());
+            }
         }
     }
 

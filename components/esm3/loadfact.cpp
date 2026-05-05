@@ -5,6 +5,8 @@
 #include "esmreader.hpp"
 #include "esmwriter.hpp"
 
+#include <components/misc/endianness.hpp>
+
 namespace ESM
 {
     int32_t& Faction::FADTstruct::getSkill(size_t index, bool)
@@ -39,9 +41,15 @@ namespace ESM
     {
         esm.getSubHeader();
         esm.getT(mAttribute);
+        if constexpr (Misc::IS_BIG_ENDIAN)
+            for (auto& v : mAttribute)
+                v = Misc::fromLittleEndian(v);
         for (auto& rank : mRankData)
             rank.load(esm);
         esm.getT(mSkills);
+        if constexpr (Misc::IS_BIG_ENDIAN)
+            for (auto& v : mSkills)
+                v = Misc::fromLittleEndian(v);
         esm.getT(mIsHidden);
         if (mIsHidden > 1)
             esm.fail("Unknown flag!");

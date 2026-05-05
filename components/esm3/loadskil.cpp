@@ -4,6 +4,7 @@
 #include "esmwriter.hpp"
 
 #include <components/misc/concepts.hpp>
+#include <components/misc/endianness.hpp>
 #include <components/misc/strings/algorithm.hpp>
 
 #include <cstdint>
@@ -63,6 +64,9 @@ namespace ESM
                     break;
                 case fourCC("SKDT"):
                     esm.getSubComposite(mData);
+                    if constexpr (Misc::IS_BIG_ENDIAN)
+                        for (float& v : mData.mUseValue)
+                            v = Misc::fromLittleEndian(v);
                     hasData = true;
                     break;
                 case fourCC("DESC"):
