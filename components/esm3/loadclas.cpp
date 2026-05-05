@@ -4,6 +4,7 @@
 
 #include <components/esm/defs.hpp>
 #include <components/misc/concepts.hpp>
+#include <components/misc/endianness.hpp>
 
 #include "esmreader.hpp"
 #include "esmwriter.hpp"
@@ -51,6 +52,14 @@ namespace ESM
                     break;
                 case fourCC("CLDT"):
                     esm.getSubComposite(mData);
+                    if constexpr (Misc::IS_BIG_ENDIAN)
+                    {
+                        for (auto& v : mData.mAttribute)
+                            v = Misc::fromLittleEndian(v);
+                        for (auto& row : mData.mSkills)
+                            for (auto& v : row)
+                                v = Misc::fromLittleEndian(v);
+                    }
                     if (mData.mIsPlayable > 1)
                         esm.fail("Unknown bool value");
                     hasData = true;

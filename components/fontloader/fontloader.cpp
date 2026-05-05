@@ -17,6 +17,7 @@
 #include <MyGUI_XmlDocument.h>
 
 #include <components/debug/debuglog.hpp>
+#include <components/misc/endianness.hpp>
 
 #include <components/fallback/fallback.hpp>
 
@@ -413,11 +414,15 @@ namespace Gui
         stream.read(reinterpret_cast<char*>(&fontSize), sizeof(fontSize));
         if (!stream.good())
             fail(stream, path, "File too small to be a valid font");
+        if constexpr (Misc::IS_BIG_ENDIAN)
+            fontSize = Misc::fromLittleEndian(fontSize);
 
         int one;
         stream.read(reinterpret_cast<char*>(&one), sizeof(one));
         if (!stream.good())
             fail(stream, path, "File too small to be a valid font");
+        if constexpr (Misc::IS_BIG_ENDIAN)
+            one = Misc::fromLittleEndian(one);
 
         if (one != 1)
             fail(stream, path, "Unexpected value");
@@ -425,6 +430,8 @@ namespace Gui
         stream.read(reinterpret_cast<char*>(&one), sizeof(one));
         if (!stream.good())
             fail(stream, path, "File too small to be a valid font");
+        if constexpr (Misc::IS_BIG_ENDIAN)
+            one = Misc::fromLittleEndian(one);
 
         if (one != 1)
             fail(stream, path, "Unexpected value");
@@ -438,6 +445,12 @@ namespace Gui
         stream.read((char*)data, sizeof(data));
         if (!stream.good())
             fail(stream, path, "File too small to be a valid font");
+        if constexpr (Misc::IS_BIG_ENDIAN)
+        {
+            uint32_t* p = reinterpret_cast<uint32_t*>(data);
+            for (size_t i = 0; i < sizeof(data) / sizeof(uint32_t); ++i)
+                Misc::swapEndiannessInplace(p[i]);
+        }
 
         // Create the font texture
         const std::string name(nameBuffer);
@@ -453,6 +466,11 @@ namespace Gui
 
         int height;
         bitmapFile->read(reinterpret_cast<char*>(&height), sizeof(int));
+        if constexpr (Misc::IS_BIG_ENDIAN)
+        {
+            width = Misc::fromLittleEndian(width);
+            height = Misc::fromLittleEndian(height);
+        }
 
         if (!bitmapFile->good())
             fail(*bitmapFile, bitmapPath, "File too small to be a valid bitmap");

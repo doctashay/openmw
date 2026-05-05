@@ -7,6 +7,7 @@
 #include <components/esm3/loadmgef.hpp>
 #include <components/esm3/loadskil.hpp>
 #include <components/misc/concepts.hpp>
+#include <components/misc/endianness.hpp>
 
 namespace ESM
 {
@@ -75,6 +76,15 @@ namespace ESM
                 case fourCC("IRDT"):
                     EsmIRDTstruct bin;
                     esm.getSubComposite(bin);
+                    if constexpr (Misc::IS_BIG_ENDIAN)
+                    {
+                        for (auto& v : bin.mEffectID)
+                            v = Misc::fromLittleEndian(v);
+                        for (auto& v : bin.mSkills)
+                            v = Misc::fromLittleEndian(v);
+                        for (auto& v : bin.mAttributes)
+                            v = Misc::fromLittleEndian(v);
+                    }
                     fromBinary(bin, mData);
                     hasData = true;
                     break;

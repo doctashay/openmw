@@ -1,6 +1,7 @@
 #ifndef COMPONENTS_MISC_ENDIANNESS_H
 #define COMPONENTS_MISC_ENDIANNESS_H
 
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <type_traits>
@@ -40,12 +41,86 @@ namespace Misc
         }
     }
 
+    inline void swapEndian16BufferInplace(void* data, std::size_t count)
+    {
+        auto* bytes = static_cast<unsigned char*>(data);
+        for (std::size_t i = 0; i < count; ++i, bytes += sizeof(std::uint16_t))
+        {
+            std::uint16_t value;
+            std::memcpy(&value, bytes, sizeof(value));
+            swapEndiannessInplace(value);
+            std::memcpy(bytes, &value, sizeof(value));
+        }
+    }
+
+    inline void swapEndian32BufferInplace(void* data, std::size_t count)
+    {
+        auto* bytes = static_cast<unsigned char*>(data);
+        for (std::size_t i = 0; i < count; ++i, bytes += sizeof(std::uint32_t))
+        {
+            std::uint32_t value;
+            std::memcpy(&value, bytes, sizeof(value));
+            swapEndiannessInplace(value);
+            std::memcpy(bytes, &value, sizeof(value));
+        }
+    }
+
+    inline void swapEndian32BufferInplaceStrided(void* data, std::size_t count, std::size_t stride)
+    {
+        if (stride == sizeof(std::uint32_t))
+        {
+            swapEndian32BufferInplace(data, count);
+            return;
+        }
+
+        auto* bytes = static_cast<unsigned char*>(data);
+        for (std::size_t i = 0; i < count; ++i, bytes += stride)
+        {
+            std::uint32_t value;
+            std::memcpy(&value, bytes, sizeof(value));
+            swapEndiannessInplace(value);
+            std::memcpy(bytes, &value, sizeof(value));
+        }
+    }
+
+    template <typename T>
+    void swapEndiannessBulkInplace(T* data, std::size_t count)
+    {
+        static_assert(std::is_arithmetic_v<T>);
+        static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4 || sizeof(T) == 8);
+
+        if constexpr (sizeof(T) == 1)
+        {
+            return;
+        }
+        else if constexpr (sizeof(T) == 2)
+        {
+            swapEndian16BufferInplace(data, count);
+        }
+        else if constexpr (sizeof(T) == 4)
+        {
+            swapEndian32BufferInplace(data, count);
+        }
+        else
+        {
+            for (std::size_t i = 0; i < count; ++i)
+                swapEndiannessInplace(data[i]);
+        }
+    }
+
 #ifdef _WIN32
     constexpr bool IS_LITTLE_ENDIAN = true;
     constexpr bool IS_BIG_ENDIAN = false;
-#else
-    constexpr bool IS_LITTLE_ENDIAN = __BYTE_ORDER__ != __ORDER_BIG_ENDIAN__;
+#elif defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) && defined(__ORDER_LITTLE_ENDIAN__)
+    // Use compiler-defined byte order if available (GCC 4.6+, Clang)
+    constexpr bool IS_LITTLE_ENDIAN = __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__;
     constexpr bool IS_BIG_ENDIAN = __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__;
+#elif defined(__ppc__) || defined(__ppc64__) || defined(__POWERPC__) || defined(__powerpc__)
+    // PowerPC is big-endian (unless it's a little-endian variant, but classic PPC is big-endian)
+    constexpr bool IS_LITTLE_ENDIAN = false;
+    constexpr bool IS_BIG_ENDIAN = true;
+#else
+#    error "Unable to determine platform byte order"
 #endif
 
     // Usage: swapEndiannessInplaceIf<IS_BIG_ENDIAN>(v)  - native to little-endian or back

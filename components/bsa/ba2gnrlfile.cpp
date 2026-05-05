@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstring>
 #include <format>
 #include <fstream>
 
@@ -10,6 +11,7 @@
 #include <components/esm/fourcc.hpp>
 #include <components/files/constrainedfilestream.hpp>
 #include <components/files/utils.hpp>
+#include <components/misc/endianness.hpp>
 #include <components/vfs/pathutil.hpp>
 
 #include "ba2file.hpp"
@@ -42,19 +44,31 @@ namespace Bsa
         for (uint32_t i = 0; i < fileCount; ++i)
         {
             uint32_t nameHash, extHash, dirHash;
-            in.read(reinterpret_cast<char*>(&nameHash), sizeof(uint32_t));
-            in.read(reinterpret_cast<char*>(&extHash), sizeof(uint32_t));
-            in.read(reinterpret_cast<char*>(&dirHash), sizeof(uint32_t));
+            readAligned(in, nameHash);
+            readAligned(in, extHash);
+            readAligned(in, dirHash);
 
             FileRecord file;
             uint32_t unknown;
-            in.read(reinterpret_cast<char*>(&unknown), sizeof(uint32_t));
-            in.read(reinterpret_cast<char*>(&file.offset), sizeof(int64_t));
-            in.read(reinterpret_cast<char*>(&file.packedSize), sizeof(uint32_t));
-            in.read(reinterpret_cast<char*>(&file.size), sizeof(uint32_t));
+            readAligned(in, unknown);
+            readAligned(in, file.offset);
+            readAligned(in, file.packedSize);
+            readAligned(in, file.size);
 
             uint32_t baadfood;
-            in.read(reinterpret_cast<char*>(&baadfood), sizeof(uint32_t));
+            readAligned(in, baadfood);
+            // BA2 files are little-endian, convert on big-endian systems
+            if constexpr (Misc::IS_BIG_ENDIAN)
+            {
+                nameHash = Misc::fromLittleEndian(nameHash);
+                extHash = Misc::fromLittleEndian(extHash);
+                dirHash = Misc::fromLittleEndian(dirHash);
+                unknown = Misc::fromLittleEndian(unknown);
+                file.offset = Misc::fromLittleEndian(file.offset);
+                file.packedSize = Misc::fromLittleEndian(file.packedSize);
+                file.size = Misc::fromLittleEndian(file.size);
+                baadfood = Misc::fromLittleEndian(baadfood);
+            }
             if (baadfood != 0xBAADF00D)
                 fail("Corrupted BSA");
 
@@ -82,8 +96,20 @@ namespace Bsa
         uint64_t fileTableOffset;
         {
             uint32_t header[4];
-            input.read(reinterpret_cast<char*>(header), 16);
-            input.read(reinterpret_cast<char*>(&fileTableOffset), 8);
+            alignas(uint32_t) char headerBuffer[16];
+            input.read(headerBuffer, 16);
+            std::memcpy(header, headerBuffer, sizeof(header));
+            readAligned(input, fileTableOffset);
+
+            // BA2 files are little-endian, convert on big-endian systems
+            if constexpr (Misc::IS_BIG_ENDIAN)
+            {
+                header[0] = Misc::fromLittleEndian(header[0]);
+                header[1] = Misc::fromLittleEndian(header[1]);
+                header[2] = Misc::fromLittleEndian(header[2]);
+                header[3] = Misc::fromLittleEndian(header[3]);
+                fileTableOffset = Misc::fromLittleEndian(fileTableOffset);
+            }
 
             if (header[0] != ESM::fourCC("BTDX"))
                 fail("Unrecognized BA2 signature");
@@ -96,7 +122,10 @@ namespace Bsa
                     break;
                 case BA2Version::StarfieldGeneral:
                     uint64_t dummy;
-                    input.read(reinterpret_cast<char*>(&dummy), 8);
+                    readAligned(input, dummy);
+                    // BA2 files are little-endian, convert on big-endian systems
+                    if constexpr (Misc::IS_BIG_ENDIAN)
+                        dummy = Misc::fromLittleEndian(dummy);
                     break;
                 default:
                     fail("Unrecognized general BA2 version");
@@ -117,7 +146,10 @@ namespace Bsa
         {
             std::vector<char> fileName;
             uint16_t fileNameSize;
-            input.read(reinterpret_cast<char*>(&fileNameSize), sizeof(uint16_t));
+            readAligned(input, fileNameSize);
+            // BA2 files are little-endian, convert on big-endian systems
+            if constexpr (Misc::IS_BIG_ENDIAN)
+                fileNameSize = Misc::fromLittleEndian(fileNameSize);
             fileName.resize(fileNameSize + 1);
             input.read(fileName.data(), fileNameSize);
             mFileNames.push_back(std::move(fileName));
