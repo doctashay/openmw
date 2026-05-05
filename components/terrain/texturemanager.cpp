@@ -15,9 +15,10 @@ namespace Terrain
     {
     }
 
-    struct UpdateTextureFilteringFunctor
+    // Use unique name for unity build compatibility
+    struct UpdateTextureTextureFilteringFunctor
     {
-        UpdateTextureFilteringFunctor(Resource::SceneManager* sceneMgr)
+        UpdateTextureTextureFilteringFunctor(Resource::SceneManager* sceneMgr)
             : mSceneManager(sceneMgr)
         {
         }
@@ -31,7 +32,7 @@ namespace Terrain
 
     void TextureManager::updateTextureFiltering()
     {
-        UpdateTextureFilteringFunctor f(mSceneManager);
+        UpdateTextureTextureFilteringFunctor f(mSceneManager);
         mCache->call(f);
     }
 
