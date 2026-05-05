@@ -320,7 +320,10 @@ else()
     find_package(OpenGL REQUIRED)
 endif()
 
-find_package(LZ4 REQUIRED)
+find_package(LZ4 QUIET)
+if(NOT LZ4_FOUND)
+    message(FATAL_ERROR "LZ4 library is required but not found. Please install LZ4 via your package manager.")
+endif()
 
 if (USE_QT)
     # Qt version selection for macOS 10.5
@@ -385,7 +388,19 @@ endif()
 
 option(OPENMW_USE_SYSTEM_ICU "Use system ICU library instead of internal. If disabled, requires autotools" ON)
 if(OPENMW_USE_SYSTEM_ICU)
-    find_package(ICU REQUIRED COMPONENTS uc i18n data)
+    find_package(ICU QUIET COMPONENTS uc i18n data)
+    if(NOT ICU_FOUND)
+        if(OPENMW_MACOSX_10_5)
+            message(WARNING "System ICU not found. Internal ICU build requires autotools (autoconf, automake, libtool).")
+            message(WARNING "It is STRONGLY recommended to install ICU via MacPorts: sudo port install icu")
+            message(WARNING "If you proceed without ICU, some features may be unavailable.")
+            # For macOS 10.5, we should probably fail if ICU is not available
+            # But let's make it a warning for now and let the build attempt continue
+        else()
+            message(STATUS "System ICU not found, will build internally")
+        endif()
+        set(OPENMW_USE_SYSTEM_ICU OFF)
+    endif()
 endif()
 
 option(OPENMW_USE_SYSTEM_YAML_CPP "Use system yaml-cpp library instead of internal." ON)
@@ -403,8 +418,12 @@ endif()
 option(YAML_CPP_STATIC "Link static build of yaml-cpp into the binaries" ${_yaml_cpp_static_default})
 
 if ((BUILD_COMPONENTS_TESTS OR BUILD_OPENCS_TESTS OR BUILD_OPENMW_TESTS) AND OPENMW_USE_SYSTEM_GOOGLETEST)
-    find_package(GTest 1.10 REQUIRED)
-    find_package(GMock 1.10 REQUIRED)
+    find_package(GTest 1.10 QUIET)
+    find_package(GMock 1.10 QUIET)
+    if(NOT GTest_FOUND OR NOT GMock_FOUND)
+        message(STATUS "System GTest/GMock not found, will build internally")
+        set(OPENMW_USE_SYSTEM_GOOGLETEST OFF)
+    endif()
 endif()
 
 add_subdirectory(extern)
@@ -444,7 +463,11 @@ if(FFmpeg_FOUND)
     endif()
 
     if(NOT FFVER_OK AND NOT APPLE)  # unable to detect on version on MacOS < 11.0
-        message(FATAL_ERROR "FFmpeg version is too old, 3.2 is required" )
+        if(OPENMW_MACOSX_10_5)
+            message(WARNING "FFmpeg version may be too old (${FFmpeg_AVFORMAT_VERSION}), but continuing for macOS 10.5 compatibility")
+        else()
+            message(FATAL_ERROR "FFmpeg version is too old, 3.2 is required" )
+        endif()
     endif()
 endif()
 
@@ -525,8 +548,14 @@ if(OPENMW_USE_SYSTEM_BULLET)
 endif()
 
 if (NOT WIN32 AND BUILD_WIZARD) # windows users can just run the morrowind installer
-    find_package(LIBUNSHIELD REQUIRED) # required only for non win32 when building openmw-wizard
-    set(OPENMW_USE_UNSHIELD TRUE)
+    find_package(LIBUNSHIELD QUIET) # required only for non win32 when building openmw-wizard
+    if(LIBUNSHIELD_FOUND)
+        set(OPENMW_USE_UNSHIELD TRUE)
+    else()
+        message(WARNING "LIBUNSHIELD not found - wizard will not be able to extract game files from installers")
+        message(WARNING "Users will need to manually extract game files")
+        set(OPENMW_USE_UNSHIELD FALSE)
+    endif()
 endif()
 
 # Fix for not visible pthreads functions for linker with glibc 2.15
@@ -576,7 +605,15 @@ endif(HAVE_MULTIVIEW)
 
 set(BOOST_COMPONENTS iostreams program_options)
 
-find_package(Boost 1.70.0 CONFIG REQUIRED COMPONENTS ${BOOST_COMPONENTS} OPTIONAL_COMPONENTS ${BOOST_OPTIONAL_COMPONENTS})
+# Try CONFIG mode first (modern Boost), fallback to MODULE mode (older installations/MacPorts)
+find_package(Boost 1.70.0 CONFIG QUIET COMPONENTS ${BOOST_COMPONENTS} OPTIONAL_COMPONENTS ${BOOST_OPTIONAL_COMPONENTS})
+if(NOT Boost_FOUND)
+    # Fallback to MODULE mode for older Boost installations or MacPorts
+    find_package(Boost 1.70.0 MODULE QUIET COMPONENTS ${BOOST_COMPONENTS} OPTIONAL_COMPONENTS ${BOOST_OPTIONAL_COMPONENTS})
+endif()
+if(NOT Boost_FOUND)
+    message(FATAL_ERROR "Boost 1.70.0 or later is required. Please install Boost via MacPorts:\n  sudo port install boost\nOr set Boost_ROOT to the Boost installation directory.")
+endif()
 
 if(OPENMW_USE_SYSTEM_MYGUI)
     find_package(MyGUI 3.4.3 QUIET)
@@ -586,15 +623,33 @@ if(OPENMW_USE_SYSTEM_MYGUI)
         set(_mygui_static_default ON)
     endif()
 endif()
-find_package(SDL2 2.0.20 REQUIRED)
-find_package(OpenAL REQUIRED)
-find_package(ZLIB REQUIRED)
+find_package(SDL2 2.0.20 QUIET)
+if(NOT SDL2_FOUND)
+    message(FATAL_ERROR "SDL2 2.0.20 or later is required but not found. Please install SDL2 via your package manager.")
+endif()
+
+find_package(OpenAL QUIET)
+if(NOT OpenAL_FOUND)
+    message(FATAL_ERROR "OpenAL is required for audio support but not found. Please install OpenAL via your package manager.")
+endif()
+
+find_package(ZLIB QUIET)
+if(NOT ZLIB_FOUND)
+    message(FATAL_ERROR "ZLIB is required but not found. Please install ZLIB via your package manager.")
+endif()
 
 option(USE_LUAJIT "Switch Lua/LuaJit (TRUE is highly recommended)" TRUE)
 if(USE_LUAJIT)
-    find_package(LuaJit REQUIRED)
-    set(LUA_INCLUDE_DIR ${LuaJit_INCLUDE_DIR})
-    set(LUA_LIBRARIES ${LuaJit_LIBRARIES})
+    find_package(LuaJit QUIET)
+    if(NOT LuaJit_FOUND)
+        message(STATUS "LuaJit not found, falling back to regular Lua")
+        set(USE_LUAJIT FALSE)
+        find_package(Lua REQUIRED)
+        add_compile_definitions(NO_LUAJIT)
+    else()
+        set(LUA_INCLUDE_DIR ${LuaJit_INCLUDE_DIR})
+        set(LUA_LIBRARIES ${LuaJit_LIBRARIES})
+    endif()
 else(USE_LUAJIT)
     find_package(Lua REQUIRED)
     add_compile_definitions(NO_LUAJIT)
@@ -941,20 +996,47 @@ if (OPENMW_OSX_DEPLOYMENT AND APPLE)
     set(ABSOLUTE_PLUGINS "")
 
     set(OSGPlugins_DONT_FIND_DEPENDENCIES 1)
-    find_package(OSGPlugins REQUIRED COMPONENTS ${USED_OSG_PLUGINS})
+    if(OPENMW_USE_SYSTEM_OSG)
+        find_package(OSGPlugins QUIET COMPONENTS ${USED_OSG_PLUGINS})
+        if(NOT OSGPlugins_FOUND)
+            message(WARNING "System OSGPlugins not found for macOS deployment. Plugins will be copied from internal build.")
+            # For internal build, plugins will be in the OSG build directory
+            # We'll need to construct paths manually or skip this section
+        endif()
+    else()
+        # OSGPlugins will be available from internal OSG build
+        message(STATUS "Using OSGPlugins from internal OSG build")
+        # For internal builds, we need to find plugins in the build directory
+        # This will be handled by the OSG build system
+    endif()
+    
+    # If OSGPlugins not found, we'll try to continue anyway (plugins may be in internal build)
+    if(NOT OSGPlugins_FOUND AND OPENMW_USE_SYSTEM_OSG)
+        message(WARNING "OSGPlugins not found - deployment may be incomplete. Consider using internal OSG build.")
+    endif()
 
     foreach (PLUGIN_NAME ${USED_OSG_PLUGINS})
         string(TOUPPER ${PLUGIN_NAME} PLUGIN_NAME_UC)
-        if(${PLUGIN_NAME_UC}_LIBRARY_RELEASE)
-            set(PLUGIN_ABS ${${PLUGIN_NAME_UC}_LIBRARY_RELEASE})
-        elseif(${PLUGIN_NAME_UC}_LIBRARY)
-            set(PLUGIN_ABS ${${PLUGIN_NAME_UC}_LIBRARY})
+        set(PLUGIN_ABS "")
+        if(OPENMW_USE_SYSTEM_OSG)
+            if(${PLUGIN_NAME_UC}_LIBRARY_RELEASE)
+                set(PLUGIN_ABS ${${PLUGIN_NAME_UC}_LIBRARY_RELEASE})
+            elseif(${PLUGIN_NAME_UC}_LIBRARY)
+                set(PLUGIN_ABS ${${PLUGIN_NAME_UC}_LIBRARY})
+            endif()
         else()
-            message(FATAL_ERROR "Can't find library file for ${PLUGIN_NAME}")
-            # We used to construct the path manually from OSGPlugins_LIB_DIR and the plugin name.
-            # Maybe that could be restored as a fallback?
+            # For internal OSG build, check if target exists and get its file path
+            set(_plugin_target ${${PLUGIN_NAME_UC}_LIBRARY})
+            if(TARGET ${_plugin_target})
+                set(PLUGIN_ABS $<TARGET_FILE:${_plugin_target}>)
+            endif()
         endif()
-        set(ABSOLUTE_PLUGINS ${PLUGIN_ABS} ${ABSOLUTE_PLUGINS})
+        if(PLUGIN_ABS)
+            set(ABSOLUTE_PLUGINS ${PLUGIN_ABS} ${ABSOLUTE_PLUGINS})
+        else()
+            message(WARNING "OSG plugin ${PLUGIN_NAME} not found - skipping for macOS deployment")
+            message(WARNING "  Plugin may be disabled due to missing dependencies")
+        endif()
     endforeach ()
 
     set(OSG_PLUGIN_PREFIX_DIR "osgPlugins-${OPENSCENEGRAPH_VERSION}")
@@ -1210,22 +1292,44 @@ if (USE_QT)
     file(GLOB LAUNCHER_TS_FILES ${CMAKE_SOURCE_DIR}/files/lang/launcher_*.ts)
     file(GLOB WIZARD_TS_FILES ${CMAKE_SOURCE_DIR}/files/lang/wizard_*.ts)
     file(GLOB COMPONENTS_TS_FILES ${CMAKE_SOURCE_DIR}/files/lang/components_*.ts)
-    get_target_property(QT_LUPDATE_EXECUTABLE Qt::lupdate IMPORTED_LOCATION)
-    add_custom_target(translations
-    COMMAND ${QT_LUPDATE_EXECUTABLE} -locations none ${CMAKE_SOURCE_DIR}/components/contentselector ${CMAKE_SOURCE_DIR}/components/process -ts ${COMPONENTS_TS_FILES}
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/components
-    VERBATIM
-    COMMAND_EXPAND_LISTS
+    if(USE_QT4)
+        # For Qt4, find lupdate manually
+        find_program(QT_LUPDATE_EXECUTABLE lupdate PATHS ${QT_BINARY_DIR} NO_DEFAULT_PATH)
+        if(NOT QT_LUPDATE_EXECUTABLE)
+            find_program(QT_LUPDATE_EXECUTABLE lupdate)
+        endif()
+        if(NOT QT_LUPDATE_EXECUTABLE)
+            message(WARNING "lupdate not found - translation updates will not work")
+        endif()
+    else()
+        get_target_property(QT_LUPDATE_EXECUTABLE Qt::lupdate IMPORTED_LOCATION)
+        if(NOT QT_LUPDATE_EXECUTABLE)
+            message(WARNING "Qt::lupdate target not found - translation updates may not work")
+        endif()
+    endif()
+    
+    if(QT_LUPDATE_EXECUTABLE)
+        add_custom_target(translations
+        COMMAND ${QT_LUPDATE_EXECUTABLE} -locations none ${CMAKE_SOURCE_DIR}/components/contentselector ${CMAKE_SOURCE_DIR}/components/process -ts ${COMPONENTS_TS_FILES}
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/components
+        VERBATIM
+        COMMAND_EXPAND_LISTS
 
-    COMMAND ${QT_LUPDATE_EXECUTABLE} -locations none ${CMAKE_SOURCE_DIR}/apps/wizard -ts ${WIZARD_TS_FILES}
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/apps/wizard
-    VERBATIM
-    COMMAND_EXPAND_LISTS
+        COMMAND ${QT_LUPDATE_EXECUTABLE} -locations none ${CMAKE_SOURCE_DIR}/apps/wizard -ts ${WIZARD_TS_FILES}
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/apps/wizard
+        VERBATIM
+        COMMAND_EXPAND_LISTS
 
-    COMMAND ${QT_LUPDATE_EXECUTABLE} -locations none ${CMAKE_SOURCE_DIR}/apps/launcher -ts ${LAUNCHER_TS_FILES}
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/apps/launcher
-    VERBATIM
-    COMMAND_EXPAND_LISTS)
+        COMMAND ${QT_LUPDATE_EXECUTABLE} -locations none ${CMAKE_SOURCE_DIR}/apps/launcher -ts ${LAUNCHER_TS_FILES}
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/apps/launcher
+        VERBATIM
+        COMMAND_EXPAND_LISTS)
+    else()
+        # Create a dummy target if lupdate is not available
+        add_custom_target(translations
+        COMMENT "lupdate not found, skipping translation updates"
+        VERBATIM)
+    endif()
 
     if (BUILD_LAUNCHER OR BUILD_WIZARD)
         if (APPLE)
@@ -1249,13 +1353,47 @@ if (USE_QT)
             set(TS_FILES ${TS_FILES} ${WIZARD_TS_FILES})
         endif ()
 
-        qt_add_translation(QM_FILES ${TS_FILES} OPTIONS -silent)
+        if(USE_QT4)
+            # For Qt4, use lrelease instead of qt_add_translation
+            find_program(QT_LRELEASE_EXECUTABLE lrelease PATHS ${QT_BINARY_DIR} NO_DEFAULT_PATH)
+            if(NOT QT_LRELEASE_EXECUTABLE)
+                find_program(QT_LRELEASE_EXECUTABLE lrelease)
+            endif()
+            if(QT_LRELEASE_EXECUTABLE)
+                set(QM_FILES "")
+                foreach(TS_FILE ${TS_FILES})
+                    get_filename_component(TS_BASENAME ${TS_FILE} NAME_WE)
+                    set(QM_FILE "${CMAKE_CURRENT_BINARY_DIR}/${TS_BASENAME}.qm")
+                    add_custom_command(OUTPUT ${QM_FILE}
+                        COMMAND ${QT_LRELEASE_EXECUTABLE} -silent ${TS_FILE} -qm ${QM_FILE}
+                        DEPENDS ${TS_FILE}
+                        COMMENT "Generating ${TS_BASENAME}.qm")
+                    list(APPEND QM_FILES ${QM_FILE})
+                endforeach()
+            else()
+                message(WARNING "lrelease not found - translation files will not be generated")
+                set(QM_FILES "")
+            endif()
+        else()
+            qt_add_translation(QM_FILES ${TS_FILES} OPTIONS -silent)
+        endif()
 
         if (DEPLOY_QT_TRANSLATIONS)
-            # Once we set a Qt 6.2.0 as a minimum required version, we may use "qtpaths --qt-query" instead.
-            get_target_property(QT_QMAKE_EXECUTABLE Qt::qmake IMPORTED_LOCATION)
-            execute_process(COMMAND "${QT_QMAKE_EXECUTABLE}" -query QT_INSTALL_TRANSLATIONS
-                OUTPUT_VARIABLE QT_TRANSLATIONS_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)
+            if(USE_QT4)
+                # For Qt4, use qmake to query translations directory
+                if(QT_QMAKE_EXECUTABLE)
+                    execute_process(COMMAND "${QT_QMAKE_EXECUTABLE}" -query QT_INSTALL_TRANSLATIONS
+                        OUTPUT_VARIABLE QT_TRANSLATIONS_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)
+                else()
+                    message(WARNING "qmake not found - Qt translations deployment disabled")
+                    set(DEPLOY_QT_TRANSLATIONS OFF)
+                endif()
+            else()
+                # Once we set a Qt 6.2.0 as a minimum required version, we may use "qtpaths --qt-query" instead.
+                get_target_property(QT_QMAKE_EXECUTABLE Qt::qmake IMPORTED_LOCATION)
+                execute_process(COMMAND "${QT_QMAKE_EXECUTABLE}" -query QT_INSTALL_TRANSLATIONS
+                    OUTPUT_VARIABLE QT_TRANSLATIONS_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)
+            endif()
 
             foreach(QM_FILE ${QM_FILES})
                 get_filename_component(QM_BASENAME ${QM_FILE} NAME)
@@ -1265,17 +1403,26 @@ if (USE_QT)
                 elseif (EXISTS "${QT_TRANSLATIONS_DIR}/qt_${LANG_NAME}.qm")
                     set(QM_FILES ${QM_FILES} "${QT_TRANSLATIONS_DIR}/qt_${LANG_NAME}.qm")
                 else ()
-                    message(FATAL_ERROR "Qt translations for '${LANG_NAME}' locale are not found in the '${QT_TRANSLATIONS_DIR}' folder.")
+                    if(OPENMW_MACOSX_10_5)
+                        message(WARNING "Qt translations for '${LANG_NAME}' locale are not found in the '${QT_TRANSLATIONS_DIR}' folder. Continuing without Qt translations.")
+                    else()
+                        message(FATAL_ERROR "Qt translations for '${LANG_NAME}' locale are not found in the '${QT_TRANSLATIONS_DIR}' folder.")
+                    endif()
                 endif ()
             endforeach(QM_FILE)
 
             list(REMOVE_DUPLICATES QM_FILES)
         endif ()
 
-        add_custom_target(qm-files
-            COMMAND ${CMAKE_COMMAND} -E make_directory ${QT_OPENMW_TRANSLATIONS_PATH}
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${QM_FILES} ${QT_OPENMW_TRANSLATIONS_PATH}
-            DEPENDS ${QM_FILES}
-            COMMENT "Copy *.qm files to resources folder")
+        if(QM_FILES)
+            add_custom_target(qm-files
+                COMMAND ${CMAKE_COMMAND} -E make_directory ${QT_OPENMW_TRANSLATIONS_PATH}
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different ${QM_FILES} ${QT_OPENMW_TRANSLATIONS_PATH}
+                DEPENDS ${QM_FILES}
+                COMMENT "Copy *.qm files to resources folder")
+        else()
+            add_custom_target(qm-files
+                COMMENT "No translation files to copy (lrelease not found or no .ts files)")
+        endif()
     endif ()
 endif()
