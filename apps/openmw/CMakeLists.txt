@@ -63,17 +63,44 @@ add_openmw_dir (mwscript
     animationextensions transformationextensions consoleextensions userextensions
     )
 
-add_openmw_dir (mwlua
-    luamanagerimp object objectlists userdataserializer luaevents engineevents objectvariant
-    context menuscripts globalscripts localscripts playerscripts luabindings objectbindings cellbindings coremwscriptbindings
-    mwscriptbindings camerabindings vfsbindings uibindings soundbindings inputbindings nearbybindings dialoguebindings
-    postprocessingbindings stats recordstore debugbindings corebindings worldbindings worker landbindings magicbindings factionbindings
-    classbindings itemdata inputprocessor animationbindings birthsignbindings racebindings markupbindings weatherbindings regionbindings
-    types/types types/door types/item types/actor types/container types/lockable types/weapon types/npc
-    types/creature types/player types/activator types/book types/lockpick types/probe types/apparatus
-    types/potion types/ingredient types/misc types/repair types/armor types/light types/static
-    types/clothing types/levelledlist types/terminal
-    )
+if (OPENMW_UNITY_BUILD AND (OPENMW_MACOSX_10_5 OR OPENMW_POWERPC_BUILD))
+    set (mwlua_files)
+    set (mwlua_cppfiles)
+    foreach (u
+        luamanagerimp object objectlists userdataserializer luaevents engineevents objectvariant
+        context menuscripts globalscripts localscripts playerscripts luabindings objectbindings cellbindings coremwscriptbindings
+        mwscriptbindings camerabindings vfsbindings uibindings soundbindings inputbindings nearbybindings dialoguebindings
+        postprocessingbindings stats recordstore debugbindings corebindings worldbindings worker landbindings magicbindings factionbindings
+        classbindings itemdata inputprocessor animationbindings birthsignbindings racebindings markupbindings weatherbindings regionbindings
+        types/types types/door types/item types/actor types/container types/lockable types/weapon types/npc
+        types/creature types/player types/activator types/book types/lockpick types/probe types/apparatus
+        types/potion types/ingredient types/misc types/repair types/armor types/light types/static
+        types/clothing types/levelledlist types/terminal)
+        file (GLOB ALL "mwlua/${u}.[ch]pp")
+        foreach (f ${ALL})
+            list (APPEND mwlua_files "${f}")
+            list (APPEND OPENMW_FILES "${f}")
+        endforeach (f)
+        file (GLOB ALL "mwlua/${u}.cpp")
+        foreach (f ${ALL})
+            list (APPEND mwlua_cppfiles "${f}")
+            list (APPEND OPENMW_FILES "${f}")
+        endforeach (f)
+    endforeach (u)
+    source_group ("apps\\openmw\\mwlua" FILES ${mwlua_files})
+else()
+    add_openmw_dir (mwlua
+        luamanagerimp object objectlists userdataserializer luaevents engineevents objectvariant
+        context menuscripts globalscripts localscripts playerscripts luabindings objectbindings cellbindings coremwscriptbindings
+        mwscriptbindings camerabindings vfsbindings uibindings soundbindings inputbindings nearbybindings dialoguebindings
+        postprocessingbindings stats recordstore debugbindings corebindings worldbindings worker landbindings magicbindings factionbindings
+        classbindings itemdata inputprocessor animationbindings birthsignbindings racebindings markupbindings weatherbindings regionbindings
+        types/types types/door types/item types/actor types/container types/lockable types/weapon types/npc
+        types/creature types/player types/activator types/book types/lockpick types/probe types/apparatus
+        types/potion types/ingredient types/misc types/repair types/armor types/light types/static
+        types/clothing types/levelledlist types/terminal
+        )
+endif()
 
 add_openmw_dir (mwsound
     soundmanagerimp openaloutput ffmpegdecoder sound soundbuffer sounddecoder soundoutput
@@ -282,6 +309,7 @@ if(APPLE AND BUILD_OPENMW)
     endif()
 
     if (OPENMW_MACOSX_10_5 OR OPENMW_POWERPC_BUILD)
+        set_target_properties(openmw PROPERTIES OSX_ARCHITECTURES "ppc")
         set_target_properties(openmw PROPERTIES BUILD_RPATH "/opt/local/lib")
         message(STATUS "Adding BUILD_RPATH /opt/local/lib for Mesa libgallium")
     endif()
