@@ -16,8 +16,8 @@ namespace ESM
     {
         using StringsSet = std::unordered_set<std::string, Misc::StringUtils::CiHash, Misc::StringUtils::CiEqual>;
 
-        // Use function to avoid unity build redefinition issues
-        const std::string& getEmptyString()
+        // Use inline function with unique name to avoid unity build redefinition issues
+        inline const std::string& getStringRefIdEmptyString()
         {
             static const std::string emptyString;
             return emptyString;
@@ -52,7 +52,7 @@ namespace ESM
     }
 
     StringRefId::StringRefId()
-        : mValue(&getEmptyString())
+        : mValue(&getStringRefIdEmptyString())
     {
     }
 
