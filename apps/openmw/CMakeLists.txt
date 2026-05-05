@@ -150,7 +150,12 @@ if(BUILD_OPENMW)
         )
     endif()
 
-    target_link_libraries(openmw openmw-lib)
+    # Force-link components so static registration code survives library dead stripping.
+    add_library(components_whole_archive INTERFACE)
+    get_whole_archive_options(COMPONENTS_WHOLE_ARCHIVE_OPTS $<TARGET_FILE:components>)
+    target_link_options(components_whole_archive INTERFACE ${COMPONENTS_WHOLE_ARCHIVE_OPTS})
+    target_link_libraries(components_whole_archive INTERFACE components)
+    target_link_libraries(openmw openmw-lib components_whole_archive)
 
     # Workaround necessary to ensure osgAnimation::MatrixLinearSampler dynamic casts work under Clang
     # NOTE: it's unclear whether the broken behavior is spec-compliant
