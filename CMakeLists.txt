@@ -270,6 +270,18 @@ option(OPENMW_USE_SYSTEM_GOOGLETEST "Use system Google Test library." OFF)
 
 option(OPENMW_UNITY_BUILD "Use fewer compilation units to speed up compile time" OFF)
 option(OPENMW_LTO_BUILD "Build OpenMW with Link-Time Optimization (Needs ~2GB of RAM)" OFF)
+option(OPENMW_OSG_SINGLE_THREADED "Force OpenSceneGraph into single-threaded mode" OFF)
+
+if(OPENMW_OSG_SINGLE_THREADED)
+    message(STATUS "OpenSceneGraph single-threaded mode enforced")
+    if(NOT OPENMW_USE_SYSTEM_OSG)
+        set(OSG_STATIC ON CACHE BOOL "Link static build of OpenSceneGraph into the binaries" FORCE)
+    endif()
+    if(NOT OPENMW_USE_SYSTEM_MYGUI)
+        set(MYGUI_STATIC ON CACHE BOOL "Link static build of Mygui into the binaries" FORCE)
+    endif()
+    message(STATUS "OSG and MyGUI forced to static linking for single-threaded builds")
+endif()
 
 # OS X deployment
 option(OPENMW_OSX_DEPLOYMENT OFF)
