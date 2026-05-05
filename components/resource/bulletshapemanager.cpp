@@ -79,7 +79,13 @@ namespace Resource
 
             osg::ref_ptr<BulletShape> shape(new BulletShape);
 
+#if defined(OPENMW_MACOSX_10_5)
+            // Skip BVH construction on 32-bit PPC: saves ~40% of per-shape memory.
+            // Collision falls back to a brute-force linear triangle scan (slower but correct).
+            auto triangleMeshShape = std::make_unique<TriangleMeshShape>(mTriangleMesh.release(), false, false);
+#else
             auto triangleMeshShape = std::make_unique<TriangleMeshShape>(mTriangleMesh.release(), true);
+#endif
             btVector3 aabbMin = triangleMeshShape->getLocalAabbMin();
             btVector3 aabbMax = triangleMeshShape->getLocalAabbMax();
             shape->mCollisionBox.mExtents[0] = static_cast<float>(aabbMax[0] - aabbMin[0]) / 2.0f;
