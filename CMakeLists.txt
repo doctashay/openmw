@@ -620,7 +620,7 @@ if(NOT HAVE_STDINT_H)
 endif()
 
 if(OPENMW_USE_SYSTEM_OSG)
-    find_package(OpenSceneGraph 3.6.5 QUIET ${USED_OSG_COMPONENTS})  # Bump to 3.6.6 when released
+    find_package(OpenSceneGraph 3.6.5 QUIET COMPONENTS ${USED_OSG_COMPONENTS})  # Bump to 3.6.6 when released
 
     if(NOT OpenSceneGraph_FOUND)
         message(STATUS "System OpenSceneGraph not found, will build internally")
@@ -658,6 +658,12 @@ set(BOOST_COMPONENTS iostreams program_options)
 set(Boost_USE_STATIC_LIBS OFF)
 set(Boost_USE_STATIC_RUNTIME OFF)
 
+# Check environment variable for Boost_ROOT if not set as CMake variable
+if(NOT Boost_ROOT AND DEFINED ENV{Boost_ROOT})
+    set(Boost_ROOT "$ENV{Boost_ROOT}" CACHE PATH "Boost root directory")
+    message(STATUS "Using Boost_ROOT from environment: ${Boost_ROOT}")
+endif()
+
 # Try CONFIG mode first (modern Boost), fallback to MODULE mode (older installations/MacPorts)
 find_package(Boost 1.70.0 CONFIG QUIET COMPONENTS ${BOOST_COMPONENTS} OPTIONAL_COMPONENTS ${BOOST_OPTIONAL_COMPONENTS})
 if(NOT Boost_FOUND)
@@ -668,6 +674,277 @@ if(NOT Boost_FOUND)
     message(FATAL_ERROR "Boost 1.70.0 or later is required. Please install Boost via MacPorts:\n  sudo port install boost\nOr set Boost_ROOT to the Boost installation directory.")
 endif()
 
+# If Boost_ROOT is set but Boost_LIBRARY_DIRS/Boost_INCLUDE_DIRS are empty,
+# manually set them (this happens when Boost doesn't have CMake config files)
+if(Boost_ROOT)
+    if(NOT Boost_LIBRARY_DIRS AND EXISTS "${Boost_ROOT}/lib")
+        set(Boost_LIBRARY_DIRS "${Boost_ROOT}/lib")
+        message(STATUS "Manually setting Boost_LIBRARY_DIRS: ${Boost_LIBRARY_DIRS}")
+    endif()
+    if(NOT Boost_INCLUDE_DIRS AND EXISTS "${Boost_ROOT}/include")
+        set(Boost_INCLUDE_DIRS "${Boost_ROOT}/include")
+        message(STATUS "Manually setting Boost_INCLUDE_DIRS: ${Boost_INCLUDE_DIRS}")
+    endif()
+endif()
+
+# Debug output
+message(STATUS "Boost found: ${Boost_FOUND}")
+message(STATUS "Boost_VERSION: ${Boost_VERSION}")
+message(STATUS "Boost_ROOT: ${Boost_ROOT}")
+message(STATUS "Boost_LIBRARY_DIRS: ${Boost_LIBRARY_DIRS}")
+message(STATUS "Boost_INCLUDE_DIRS: ${Boost_INCLUDE_DIRS}")
+message(STATUS "Boost_LIBRARIES: ${Boost_LIBRARIES}")
+
+# Create imported targets if they don't exist (MODULE mode doesn't create them)
+if(NOT TARGET Boost::program_options)
+    add_library(Boost::program_options IMPORTED UNKNOWN)
+    set(BOOST_PO_FOUND FALSE)
+    set(BOOST_PO_LIB "")
+    
+    # Try component-specific variables first
+    if(Boost_PROGRAM_OPTIONS_LIBRARY_RELEASE)
+        set_target_properties(Boost::program_options PROPERTIES
+            IMPORTED_LOCATION_RELEASE "${Boost_PROGRAM_OPTIONS_LIBRARY_RELEASE}")
+        set(BOOST_PO_FOUND TRUE)
+        set(BOOST_PO_LIB "${Boost_PROGRAM_OPTIONS_LIBRARY_RELEASE}")
+    endif()
+    if(Boost_PROGRAM_OPTIONS_LIBRARY_DEBUG)
+        set_target_properties(Boost::program_options PROPERTIES
+            IMPORTED_LOCATION_DEBUG "${Boost_PROGRAM_OPTIONS_LIBRARY_DEBUG}")
+        set(BOOST_PO_FOUND TRUE)
+        if(NOT BOOST_PO_LIB)
+            set(BOOST_PO_LIB "${Boost_PROGRAM_OPTIONS_LIBRARY_DEBUG}")
+        endif()
+    endif()
+    if(Boost_PROGRAM_OPTIONS_LIBRARY)
+        set_target_properties(Boost::program_options PROPERTIES
+            IMPORTED_LOCATION "${Boost_PROGRAM_OPTIONS_LIBRARY}")
+        set(BOOST_PO_FOUND TRUE)
+        if(NOT BOOST_PO_LIB)
+            set(BOOST_PO_LIB "${Boost_PROGRAM_OPTIONS_LIBRARY}")
+        endif()
+    endif()
+    
+    # Fallback: Extract from Boost_LIBRARIES
+    if(NOT BOOST_PO_FOUND AND Boost_LIBRARIES)
+        foreach(lib ${Boost_LIBRARIES})
+            # Skip generator expressions and keywords
+            if(lib MATCHES "program_options" AND NOT lib MATCHES "^(optimized|debug|general)$")
+                # Remove generator expression keywords
+                string(REGEX REPLACE "^(optimized|debug);" "" clean_lib "${lib}")
+                if(EXISTS "${clean_lib}")
+                    set_target_properties(Boost::program_options PROPERTIES
+                        IMPORTED_LOCATION "${clean_lib}")
+                    set(BOOST_PO_FOUND TRUE)
+                    set(BOOST_PO_LIB "${clean_lib}")
+                    break()
+                endif()
+            endif()
+        endforeach()
+    endif()
+    
+    # Fallback: Construct path from Boost_LIBRARY_DIRS
+    if(NOT BOOST_PO_FOUND AND Boost_LIBRARY_DIRS)
+        # Try shared library first (since Boost_USE_STATIC_LIBS is OFF)
+        find_library(BOOST_PO_LIB_TMP
+            NAMES boost_program_options
+            PATHS ${Boost_LIBRARY_DIRS}
+            NO_DEFAULT_PATH
+        )
+        if(BOOST_PO_LIB_TMP)
+            set_target_properties(Boost::program_options PROPERTIES
+                IMPORTED_LOCATION "${BOOST_PO_LIB_TMP}")
+            set(BOOST_PO_FOUND TRUE)
+            set(BOOST_PO_LIB "${BOOST_PO_LIB_TMP}")
+        endif()
+    endif()
+    
+    # Fallback: Use Boost_ROOT if set (CMake variable or environment variable)
+    if(NOT BOOST_PO_FOUND)
+        set(BOOST_ROOT_TO_CHECK "${Boost_ROOT}")
+        if(NOT BOOST_ROOT_TO_CHECK AND DEFINED ENV{Boost_ROOT})
+            set(BOOST_ROOT_TO_CHECK "$ENV{Boost_ROOT}")
+        endif()
+        if(BOOST_ROOT_TO_CHECK)
+            find_library(BOOST_PO_LIB_TMP
+                NAMES boost_program_options
+                PATHS "${BOOST_ROOT_TO_CHECK}/lib"
+                NO_DEFAULT_PATH
+            )
+            if(BOOST_PO_LIB_TMP)
+                set_target_properties(Boost::program_options PROPERTIES
+                    IMPORTED_LOCATION "${BOOST_PO_LIB_TMP}")
+                set(BOOST_PO_FOUND TRUE)
+                set(BOOST_PO_LIB "${BOOST_PO_LIB_TMP}")
+            endif()
+        endif()
+    endif()
+    
+    if(Boost_INCLUDE_DIRS)
+        set_target_properties(Boost::program_options PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${Boost_INCLUDE_DIRS}")
+    endif()
+    
+    if(NOT BOOST_PO_FOUND)
+        set(ENV_BOOST_ROOT "")
+        if(DEFINED ENV{Boost_ROOT})
+            set(ENV_BOOST_ROOT "$ENV{Boost_ROOT}")
+        endif()
+        message(FATAL_ERROR 
+            "Boost::program_options library not found.\n"
+            "Boost_PROGRAM_OPTIONS_LIBRARY: ${Boost_PROGRAM_OPTIONS_LIBRARY}\n"
+            "Boost_LIBRARIES: ${Boost_LIBRARIES}\n"
+            "Boost_LIBRARY_DIRS: ${Boost_LIBRARY_DIRS}\n"
+            "Boost_ROOT (CMake): ${Boost_ROOT}\n"
+            "Boost_ROOT (env): ${ENV_BOOST_ROOT}\n"
+            "Please ensure Boost is properly installed and set Boost_ROOT:\n"
+            "  -D Boost_ROOT=/opt/local/boost181-gcc14-ppc\n"
+            "  or export Boost_ROOT=/opt/local/boost181-gcc14-ppc")
+    endif()
+endif()
+
+if(NOT TARGET Boost::iostreams)
+    add_library(Boost::iostreams IMPORTED UNKNOWN)
+    set(BOOST_IOSTREAMS_FOUND FALSE)
+    set(BOOST_IOSTREAMS_LIB "")
+    
+    # Try component-specific variables first
+    if(Boost_IOSTREAMS_LIBRARY_RELEASE)
+        set_target_properties(Boost::iostreams PROPERTIES
+            IMPORTED_LOCATION_RELEASE "${Boost_IOSTREAMS_LIBRARY_RELEASE}")
+        set(BOOST_IOSTREAMS_FOUND TRUE)
+        set(BOOST_IOSTREAMS_LIB "${Boost_IOSTREAMS_LIBRARY_RELEASE}")
+    endif()
+    if(Boost_IOSTREAMS_LIBRARY_DEBUG)
+        set_target_properties(Boost::iostreams PROPERTIES
+            IMPORTED_LOCATION_DEBUG "${Boost_IOSTREAMS_LIBRARY_DEBUG}")
+        set(BOOST_IOSTREAMS_FOUND TRUE)
+        if(NOT BOOST_IOSTREAMS_LIB)
+            set(BOOST_IOSTREAMS_LIB "${Boost_IOSTREAMS_LIBRARY_DEBUG}")
+        endif()
+    endif()
+    if(Boost_IOSTREAMS_LIBRARY)
+        set_target_properties(Boost::iostreams PROPERTIES
+            IMPORTED_LOCATION "${Boost_IOSTREAMS_LIBRARY}")
+        set(BOOST_IOSTREAMS_FOUND TRUE)
+        if(NOT BOOST_IOSTREAMS_LIB)
+            set(BOOST_IOSTREAMS_LIB "${Boost_IOSTREAMS_LIBRARY}")
+        endif()
+    endif()
+    
+    # Fallback: Extract from Boost_LIBRARIES
+    if(NOT BOOST_IOSTREAMS_FOUND AND Boost_LIBRARIES)
+        foreach(lib ${Boost_LIBRARIES})
+            if(lib MATCHES "iostreams" AND NOT lib MATCHES "^(optimized|debug|general)$")
+                string(REGEX REPLACE "^(optimized|debug);" "" clean_lib "${lib}")
+                if(EXISTS "${clean_lib}")
+                    set_target_properties(Boost::iostreams PROPERTIES
+                        IMPORTED_LOCATION "${clean_lib}")
+                    set(BOOST_IOSTREAMS_FOUND TRUE)
+                    set(BOOST_IOSTREAMS_LIB "${clean_lib}")
+                    break()
+                endif()
+            endif()
+        endforeach()
+    endif()
+    
+    # Fallback: Construct path from Boost_LIBRARY_DIRS
+    if(NOT BOOST_IOSTREAMS_FOUND AND Boost_LIBRARY_DIRS)
+        find_library(BOOST_IOSTREAMS_LIB_TMP
+            NAMES boost_iostreams
+            PATHS ${Boost_LIBRARY_DIRS}
+            NO_DEFAULT_PATH
+        )
+        if(BOOST_IOSTREAMS_LIB_TMP)
+            set_target_properties(Boost::iostreams PROPERTIES
+                IMPORTED_LOCATION "${BOOST_IOSTREAMS_LIB_TMP}")
+            set(BOOST_IOSTREAMS_FOUND TRUE)
+            set(BOOST_IOSTREAMS_LIB "${BOOST_IOSTREAMS_LIB_TMP}")
+        endif()
+    endif()
+    
+    # Fallback: Use Boost_ROOT if set (CMake variable or environment variable)
+    if(NOT BOOST_IOSTREAMS_FOUND)
+        set(BOOST_ROOT_TO_CHECK "${Boost_ROOT}")
+        if(NOT BOOST_ROOT_TO_CHECK AND DEFINED ENV{Boost_ROOT})
+            set(BOOST_ROOT_TO_CHECK "$ENV{Boost_ROOT}")
+        endif()
+        if(BOOST_ROOT_TO_CHECK)
+            find_library(BOOST_IOSTREAMS_LIB_TMP
+                NAMES boost_iostreams
+                PATHS "${BOOST_ROOT_TO_CHECK}/lib"
+                NO_DEFAULT_PATH
+            )
+            if(BOOST_IOSTREAMS_LIB_TMP)
+                set_target_properties(Boost::iostreams PROPERTIES
+                    IMPORTED_LOCATION "${BOOST_IOSTREAMS_LIB_TMP}")
+                set(BOOST_IOSTREAMS_FOUND TRUE)
+                set(BOOST_IOSTREAMS_LIB "${BOOST_IOSTREAMS_LIB_TMP}")
+            endif()
+        endif()
+    endif()
+    
+    if(Boost_INCLUDE_DIRS)
+        set_target_properties(Boost::iostreams PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${Boost_INCLUDE_DIRS}")
+    endif()
+    
+    if(NOT BOOST_IOSTREAMS_FOUND)
+        set(ENV_BOOST_ROOT "")
+        if(DEFINED ENV{Boost_ROOT})
+            set(ENV_BOOST_ROOT "$ENV{Boost_ROOT}")
+        endif()
+        message(FATAL_ERROR 
+            "Boost::iostreams library not found.\n"
+            "Boost_IOSTREAMS_LIBRARY: ${Boost_IOSTREAMS_LIBRARY}\n"
+            "Boost_LIBRARIES: ${Boost_LIBRARIES}\n"
+            "Boost_LIBRARY_DIRS: ${Boost_LIBRARY_DIRS}\n"
+            "Boost_ROOT (CMake): ${Boost_ROOT}\n"
+            "Boost_ROOT (env): ${ENV_BOOST_ROOT}\n"
+            "Please ensure Boost is properly installed and set Boost_ROOT:\n"
+            "  -D Boost_ROOT=/opt/local/boost181-gcc14-ppc\n"
+            "  or export Boost_ROOT=/opt/local/boost181-gcc14-ppc")
+    endif()
+endif()
+
+# For PowerPC builds, verify program_options library has PowerPC architecture
+if(APPLE AND (CMAKE_OSX_ARCHITECTURES MATCHES "ppc" OR OPENMW_POWERPC_BUILD))
+    # Try to find the actual program_options library file
+    if(TARGET Boost::program_options)
+        get_target_property(BOOST_PO_LOCATION Boost::program_options LOCATION)
+        if(BOOST_PO_LOCATION STREQUAL "BOOST_PO_LOCATION-NOTFOUND")
+            # Try alternative method
+            get_target_property(BOOST_PO_IMPORTED_LOCATION Boost::program_options IMPORTED_LOCATION)
+            if(NOT BOOST_PO_IMPORTED_LOCATION STREQUAL "BOOST_PO_IMPORTED_LOCATION-NOTFOUND")
+                set(BOOST_PO_LOCATION "${BOOST_PO_IMPORTED_LOCATION}")
+            endif()
+        endif()
+        if(BOOST_PO_LOCATION AND EXISTS "${BOOST_PO_LOCATION}")
+            execute_process(
+                COMMAND lipo -info "${BOOST_PO_LOCATION}"
+                OUTPUT_VARIABLE BOOST_PO_ARCH_INFO
+                ERROR_QUIET
+            )
+            if(BOOST_PO_ARCH_INFO)
+                string(FIND "${BOOST_PO_ARCH_INFO}" "ppc" PPC_POS)
+                string(FIND "${BOOST_PO_ARCH_INFO}" "powerpc" POWERPC_POS)
+                if(PPC_POS EQUAL -1 AND POWERPC_POS EQUAL -1)
+                    message(FATAL_ERROR
+                        "BOOST PROGRAM_OPTIONS MISSING POWERPC ARCHITECTURE\n"
+                        "The Boost program_options library does not contain PowerPC architecture.\n"
+                        "Library: ${BOOST_PO_LOCATION}\n"
+                        "Architectures found: ${BOOST_PO_ARCH_INFO}\n"
+                        "This will cause linker errors: Undefined symbols for architecture ppc.\n"
+                        "SOLUTION: Rebuild Boost for PowerPC using build_boost181_ppc.sh\n"
+                        "Then set: export Boost_ROOT=/opt/local/boost181-gcc14-ppc"
+                    )
+                else()
+                    message(STATUS "Boost program_options contains PowerPC architecture")
+                endif()
+            endif()
+        endif()
+    endif()
+endif()
 # Check Boost ABI compatibility for PowerPC/macOS 10.5
 # MacPorts Boost may be built with Clang/libc++, but we're using GCC/libstdc++
 # IMPORTANT: MacPorts must be configured with 'cxx_stdlib libstdc++' in macports.conf
@@ -726,6 +1003,24 @@ if(APPLE AND (CMAKE_OSX_ARCHITECTURES MATCHES "ppc" OR OPENMW_POWERPC_BUILD))
             )
             if(BOOST_ARCH_INFO)
                 message(STATUS "Boost architecture: ${BOOST_ARCH_INFO}")
+                # Check if PowerPC architecture is present
+                string(FIND "${BOOST_ARCH_INFO}" "ppc" PPC_POS)
+                string(FIND "${BOOST_ARCH_INFO}" "powerpc" POWERPC_POS)
+                if(PPC_POS EQUAL -1)
+                    if(POWERPC_POS EQUAL -1)
+                        message(WARNING "Boost library does NOT contain PowerPC architecture!")
+                        message(WARNING "Found architectures: ${BOOST_ARCH_INFO}")
+                        message(WARNING "This will cause linker errors for PowerPC builds.")
+                        message(WARNING "Solution: Rebuild Boost for PowerPC using build_boost181_ppc.sh")
+                        set(BOOST_MISSING_PPC TRUE)
+                    else()
+                        message(STATUS "Boost library contains PowerPC architecture")
+                    endif()
+                else()
+                    message(STATUS "Boost library contains PowerPC architecture")
+                endif()
+            else()
+                message(WARNING "Could not determine Boost library architecture")
             endif()
             
             # Use otool -L to check linked standard library
