@@ -1,6 +1,7 @@
 #ifndef OPENMW_COMPONENTS_RESOURCE_RESOURCESYSTEM_H
 #define OPENMW_COMPONENTS_RESOURCE_RESOURCESYSTEM_H
 
+#include <cstddef>
 #include <memory>
 #include <vector>
 
@@ -58,6 +59,7 @@ namespace Resource
         void clearCache();
 
         /// Add this ResourceManager to be handled by the ResourceSystem.
+        /// If a max cache size is set, it is applied to the new manager.
         /// @note Does not transfer ownership.
         void addResourceManager(BaseResourceManager* resourceMgr);
         /// @note Do nothing if resourceMgr does not exist.
@@ -66,6 +68,9 @@ namespace Resource
 
         /// How long to keep objects in cache after no longer being referenced.
         void setExpiryDelay(double expiryDelay);
+
+        /// Set max cache entry count per manager (0 = no limit). Applied to all registered resource managers.
+        void setMaxCacheSize(std::size_t maxSize);
 
         /// @note May be called from any thread.
         const VFS::Manager* getVFS() const;
@@ -88,6 +93,7 @@ namespace Resource
         std::vector<BaseResourceManager*> mResourceManagers;
 
         const VFS::Manager* mVFS;
+        std::size_t mMaxCacheSize = 0;
 
         ResourceSystem(const ResourceSystem&);
         void operator=(const ResourceSystem&);

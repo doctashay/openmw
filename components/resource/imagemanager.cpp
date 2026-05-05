@@ -90,7 +90,6 @@ namespace Resource
         osg::ref_ptr<osg::Object> obj = mCache->getRefFromObjectCache(path);
         if (obj)
             return osg::ref_ptr<osg::Image>(static_cast<osg::Image*>(obj.get()));
-        else
         {
             Files::IStreamPtr stream;
             try
@@ -99,6 +98,21 @@ namespace Resource
             }
             catch (std::exception& e)
             {
+#if defined(OPENMW_MACOSX_10_5)
+                std::string pathStr(path.value());
+                if (pathStr.size() > 4 && pathStr.substr(pathStr.size() - 4) == ".dds")
+                {
+                    std::string pngPath = pathStr.substr(0, pathStr.size() - 4) + ".png";
+                    try
+                    {
+                        Log(Debug::Warning) << "DDS file failed to load on big-endian system, trying PNG: " << pngPath;
+                        return getImage(VFS::Path::Normalized(pngPath), disableFlip);
+                    }
+                    catch (...)
+                    {
+                    }
+                }
+#endif
                 Log(Debug::Error) << "Failed to open image: " << e.what();
                 mCache->addEntryToObjectCache(path.value(), mWarningImage);
                 return mWarningImage;
@@ -140,6 +154,26 @@ namespace Resource
                 = reader->readImage(*stream, disableFlip ? mOptionsNoFlip : mOptions);
             if (!result.success())
             {
+#if defined(OPENMW_MACOSX_10_5)
+                std::string pathStr(path.value());
+                if (pathStr.size() > 4 && pathStr.substr(pathStr.size() - 4) == ".dds")
+                {
+                    std::string pngPath = pathStr.substr(0, pathStr.size() - 4) + ".png";
+                    try
+                    {
+                        Files::IStreamPtr pngStream = mVFS->get(VFS::Path::Normalized(pngPath));
+                        if (pngStream)
+                        {
+                            Log(Debug::Warning)
+                                << "DDS file failed to parse on big-endian system, trying PNG: " << pngPath;
+                            return getImage(VFS::Path::Normalized(pngPath), disableFlip);
+                        }
+                    }
+                    catch (...)
+                    {
+                    }
+                }
+#endif
                 Log(Debug::Error) << "Error loading " << path << ": " << result.message() << " code "
                                   << result.status();
                 mCache->addEntryToObjectCache(path.value(), mWarningImage);

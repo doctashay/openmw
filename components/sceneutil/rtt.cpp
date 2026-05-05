@@ -5,6 +5,8 @@
 #include <osg/Texture2DArray>
 #include <osgUtil/CullVisitor>
 
+#include <algorithm>
+
 #include <components/sceneutil/color.hpp>
 #include <components/sceneutil/depth.hpp>
 #include <components/sceneutil/nodecallback.hpp>
@@ -19,10 +21,20 @@ namespace SceneUtil
         void operator()(RTTNode* node, osgUtil::CullVisitor* cv) { node->cull(cv); }
     };
 
+    namespace
+    {
+        uint32_t sMaxDimension = 0;
+    }
+
+    void RTTNode::setMaxDimension(uint32_t max)
+    {
+        sMaxDimension = max;
+    }
+
     RTTNode::RTTNode(uint32_t textureWidth, uint32_t textureHeight, uint32_t samples, bool generateMipmaps,
         int renderOrderNum, StereoAwareness stereoAwareness, bool addMSAAIntermediateTarget)
-        : mTextureWidth(textureWidth)
-        , mTextureHeight(textureHeight)
+        : mTextureWidth(sMaxDimension > 0 ? std::min(textureWidth, sMaxDimension) : textureWidth)
+        , mTextureHeight(sMaxDimension > 0 ? std::min(textureHeight, sMaxDimension) : textureHeight)
         , mSamples(samples)
         , mGenerateMipmaps(generateMipmaps)
         , mColorBufferInternalFormat(Color::colorInternalFormat())

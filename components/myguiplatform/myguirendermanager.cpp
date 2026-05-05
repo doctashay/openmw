@@ -3,6 +3,7 @@
 #include <MyGUI_Timer.h>
 
 #include <osg/Drawable>
+#include <osg/GL>
 #include <osg/TexMat>
 #include <osg/Texture2D>
 
@@ -10,11 +11,46 @@
 
 #include <osgGA/GUIEventHandler>
 
+#include <components/misc/endianness.hpp>
 #include <components/resource/imagemanager.hpp>
 #include <components/sceneutil/nodecallback.hpp>
 #include <components/shader/shadermanager.hpp>
 
 #include "myguitexture.hpp"
+
+namespace
+{
+    void safeDisableAllVertexArrays(osg::State* state)
+    {
+#if defined(OPENMW_MACOSX_10_5) || defined(__APPLE__)
+        const GLubyte* version = glGetString(GL_VERSION);
+        if (!version)
+        {
+            static bool sLoggedOnce = false;
+            if (!sLoggedOnce)
+            {
+                OSG_WARN << "MyGUI: glGetString returned null, using legacy vertex array disable" << std::endl;
+                sLoggedOnce = true;
+            }
+            glDisableClientState(GL_VERTEX_ARRAY);
+            glDisableClientState(GL_NORMAL_ARRAY);
+            glDisableClientState(GL_COLOR_ARRAY);
+            glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+#ifdef GL_SECONDARY_COLOR_ARRAY
+            glDisableClientState(GL_SECONDARY_COLOR_ARRAY);
+#endif
+#ifdef GL_FOG_COORD_ARRAY
+            glDisableClientState(GL_FOG_COORD_ARRAY);
+#endif
+#ifdef GL_EDGE_FLAG_ARRAY
+            glDisableClientState(GL_EDGE_FLAG_ARRAY);
+#endif
+            return;
+        }
+#endif
+        state->disableAllVertexArrays();
+    }
+}
 
 #define MYGUI_PLATFORM_LOG_SECTION "Platform"
 #define MYGUI_PLATFORM_LOG(level, text) MYGUI_LOGGING(MYGUI_PLATFORM_LOG_SECTION, level, text)
@@ -92,7 +128,7 @@ namespace MyGUIPlatform
             state->pushStateSet(mStateSet);
             state->apply();
 
-            state->disableAllVertexArrays();
+            safeDisableAllVertexArrays(state);
             state->setClientActiveTextureUnit(0);
             glEnableClientState(GL_VERTEX_ARRAY);
             glEnableClientState(GL_TEXTURE_COORD_ARRAY);
@@ -158,7 +194,7 @@ namespace MyGUIPlatform
 
             state->unbindVertexBufferObject();
             state->dirtyAllVertexArrays();
-            state->disableAllVertexArrays();
+            safeDisableAllVertexArrays(state);
         }
 
     public:

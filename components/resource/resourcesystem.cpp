@@ -81,6 +81,14 @@ namespace Resource
         mNifFileManager->setExpiryDelay(0.0);
     }
 
+    void ResourceSystem::setMaxCacheSize(std::size_t maxSize)
+    {
+        mMaxCacheSize = maxSize;
+        for (std::vector<BaseResourceManager*>::iterator it = mResourceManagers.begin(); it != mResourceManagers.end();
+             ++it)
+            (*it)->setMaxCacheSize(maxSize);
+    }
+
     void ResourceSystem::updateCache(double referenceTime)
     {
         for (std::vector<BaseResourceManager*>::iterator it = mResourceManagers.begin(); it != mResourceManagers.end();
@@ -98,6 +106,8 @@ namespace Resource
     void ResourceSystem::addResourceManager(BaseResourceManager* resourceMgr)
     {
         mResourceManagers.push_back(resourceMgr);
+        if (mMaxCacheSize > 0)
+            resourceMgr->setMaxCacheSize(mMaxCacheSize);
     }
 
     void ResourceSystem::removeResourceManager(BaseResourceManager* resourceMgr)
