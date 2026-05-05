@@ -340,12 +340,30 @@ endif()
 
 # Dependencies
 if (APPLE)
-    # Force CMake to use the installed version of OpenGL on macOS
+    # Force the system OpenGL framework on macOS instead of /opt/local Mesa.
     set(_SAVE_CMAKE_FIND_FRAMEWORK ${CMAKE_FIND_FRAMEWORK})
     set(CMAKE_FIND_FRAMEWORK ONLY)
+    set(_SAVE_PREFIX_PATH ${CMAKE_PREFIX_PATH})
+    list(FILTER CMAKE_PREFIX_PATH EXCLUDE REGEX ".*opt/local.*")
     find_package(OpenGL REQUIRED)
+    set(CMAKE_PREFIX_PATH ${_SAVE_PREFIX_PATH})
     set(CMAKE_FIND_FRAMEWORK ${_SAVE_CMAKE_FIND_FRAMEWORK})
     unset(_SAVE_CMAKE_FIND_FRAMEWORK)
+    unset(_SAVE_PREFIX_PATH)
+    if(OPENGL_gl_LIBRARY AND OPENGL_gl_LIBRARY MATCHES "/opt/local")
+        unset(OPENGL_gl_LIBRARY CACHE)
+        find_library(OPENGL_gl_LIBRARY NAMES OpenGL
+            PATHS /System/Library/Frameworks /Library/Frameworks
+            NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
+        if(OPENGL_gl_LIBRARY)
+            get_filename_component(_OPENGL_FRAMEWORK_DIR "${OPENGL_gl_LIBRARY}" DIRECTORY)
+            if(EXISTS "${_OPENGL_FRAMEWORK_DIR}/Headers")
+                set(OPENGL_INCLUDE_DIR "${_OPENGL_FRAMEWORK_DIR}/Headers" CACHE PATH "OpenGL include dir" FORCE)
+            endif()
+            unset(_OPENGL_FRAMEWORK_DIR)
+            message(STATUS "Using system OpenGL framework: ${OPENGL_gl_LIBRARY}")
+        endif()
+    endif()
 else()
     find_package(OpenGL REQUIRED)
 endif()
