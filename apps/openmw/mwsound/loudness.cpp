@@ -3,10 +3,22 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 
 namespace MWSound
 {
+
+namespace
+{
+    template <class T>
+    T readUnaligned(const char* src)
+    {
+        T value;
+        std::memcpy(&value, src, sizeof(value));
+        return value;
+    }
+}
 
     void Sound_Loudness::analyzeLoudness(const std::vector<char>& data)
     {
@@ -32,12 +44,12 @@ namespace MWSound
                     value = ((char)(mQueue[sample * advance] ^ 0x80)) / 128.f;
                 else if (mSampleType == SampleType_Int16)
                 {
-                    value = *reinterpret_cast<const int16_t*>(&mQueue[sample * advance]);
+                    value = readUnaligned<int16_t>(&mQueue[sample * advance]);
                     value /= float(std::numeric_limits<int16_t>::max());
                 }
                 else if (mSampleType == SampleType_Float32)
                 {
-                    value = *reinterpret_cast<const float*>(&mQueue[sample * advance]);
+                    value = readUnaligned<float>(&mQueue[sample * advance]);
                     value = std::clamp(value, -1.f, 1.f); // Float samples *should* be scaled to [-1,1] already.
                 }
 
