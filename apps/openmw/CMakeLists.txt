@@ -15,6 +15,11 @@ set(OPENMW_HEADERS
     profile.hpp
 )
 
+if (APPLE)
+    list(APPEND OPENMW_SOURCES glwarningdialog.mm)
+    list(APPEND OPENMW_HEADERS glwarningdialog.hpp)
+endif()
+
 source_group(apps/openmw FILES main.cpp androidmain.cpp ${OPENMW_SOURCES} ${OPENMW_HEADERS} ${OPENMW_RESOURCES})
 
 add_openmw_dir (mwrender

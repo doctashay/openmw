@@ -333,6 +333,10 @@ namespace MWRender
         // Figure out which pipeline must be used by default and inform the user
         bool forceShaders = Settings::shaders().mForceShaders;
         {
+#if defined(OPENMW_MACOSX_10_5)
+            forceShaders = false;
+            Log(Debug::Info) << "OPENMW_MACOSX_10_5: forcing fixed-function rendering";
+#else
             std::vector<std::string> requesters;
             if (!forceShaders)
             {
@@ -376,6 +380,7 @@ namespace MWRender
             {
                 Log(Debug::Info) << "Using fixed-function rendering by default";
             }
+#endif
         }
 
         resourceSystem->getSceneManager()->setForceShaders(forceShaders);
@@ -553,9 +558,10 @@ namespace MWRender
 
         mFog = std::make_unique<FogManager>();
 
+        bool enableSkyRTT = mSkyBlending;
         mSky = std::make_unique<SkyManager>(
-            sceneRoot, mRootNode, mViewer->getCamera(), resourceSystem->getSceneManager(), mSkyBlending);
-        if (mSkyBlending)
+            sceneRoot, mRootNode, mViewer->getCamera(), resourceSystem->getSceneManager(), enableSkyRTT);
+        if (enableSkyRTT)
         {
             int skyTextureUnit = mResourceSystem->getSceneManager()->getShaderManager().reserveGlobalTextureUnits(
                 Shader::ShaderManager::Slot::SkyTexture);

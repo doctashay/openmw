@@ -593,7 +593,7 @@ namespace Resource
 
     void SceneManager::setUpNormalsRTForStateSet(osg::StateSet* stateset, bool enabled)
     {
-        if (!getSupportsNormalsRT())
+        if (!getSupportsNormalsRT() || getOpenGL1Fallback())
             return;
         stateset->setAttributeAndModes(new osg::ColorMaski(1, enabled, enabled, enabled, enabled));
 

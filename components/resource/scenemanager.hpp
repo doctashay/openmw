@@ -49,6 +49,9 @@ namespace Shader
 
 namespace Resource
 {
+    // Runtime capability guard for code paths that must not run on the OpenGL 1.x fallback renderer.
+#define OPENMW_RUNTIME_OPENGL1(sceneManager) ((sceneManager) && (sceneManager)->getOpenGL1Fallback())
+
     class TemplateRef : public osg::Object
     {
     public:
@@ -225,6 +228,9 @@ namespace Resource
 
         void reportStats(unsigned int frameNumber, osg::Stats* stats) const override;
 
+        void setOpenGL1Fallback(bool value) { mOpenGL1Fallback = value; }
+        bool getOpenGL1Fallback() const { return mOpenGL1Fallback; }
+
         void setSupportsNormalsRT(bool supports) { mSupportsNormalsRT = supports; }
         bool getSupportsNormalsRT() const { return mSupportsNormalsRT; }
 
@@ -268,6 +274,7 @@ namespace Resource
         bool mApplyLightingToEnvMaps = false;
         bool mConvertAlphaTestToAlphaToCoverage = false;
         bool mAdjustCoverageForAlphaTest = false;
+        bool mOpenGL1Fallback = false;
         bool mSupportsNormalsRT = false;
         bool mWeatherParticleOcclusion = false;
         bool mUnRefImageDataAfterApply = false;

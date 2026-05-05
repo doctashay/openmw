@@ -2,6 +2,8 @@
 
 #include <cerrno>
 #include <chrono>
+#include <cstdlib>
+#include <fstream>
 #include <future>
 #include <system_error>
 
@@ -147,10 +149,53 @@ namespace
 
         void operator()(osg::GraphicsContext* graphicsContext) override
         {
-            Log(Debug::Info) << "OpenGL Vendor: " << glGetString(GL_VENDOR);
-            Log(Debug::Info) << "OpenGL Renderer: " << glGetString(GL_RENDERER);
-            Log(Debug::Info) << "OpenGL Version: " << glGetString(GL_VERSION);
-            glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &mMaxTextureImageUnits);
+            if (!graphicsContext || !graphicsContext->getState() || !graphicsContext->makeCurrent())
+            {
+                Log(Debug::Warning)
+                    << "Warning: OpenGL version test failed, requires valid graphics context. Assuming OpenGL 2.0.";
+                mMaxTextureImageUnits = 8;
+                return;
+            }
+
+            const GLubyte* vendor = glGetString(GL_VENDOR);
+            const GLubyte* renderer = glGetString(GL_RENDERER);
+            const GLubyte* version = glGetString(GL_VERSION);
+
+            if (vendor)
+                Log(Debug::Info) << "OpenGL Vendor: " << vendor;
+            else
+                Log(Debug::Warning) << "Warning: Could not get OpenGL vendor. Assuming OpenGL 2.0.";
+
+            if (renderer)
+                Log(Debug::Info) << "OpenGL Renderer: " << renderer;
+
+            float parsedVersion = 0.f;
+            if (version)
+            {
+                Log(Debug::Info) << "OpenGL Version: " << version;
+                char* end = nullptr;
+                parsedVersion = std::strtof(reinterpret_cast<const char*>(version), &end);
+                if (parsedVersion > 2.0f)
+                    Log(Debug::Warning) << "OpenGL version " << parsedVersion
+                                        << " reported; capping feature usage to 2.0 for compatibility.";
+            }
+            else
+                Log(Debug::Warning) << "Warning: Could not get OpenGL version. Assuming OpenGL 2.0.";
+
+            mParsedVersion = parsedVersion;
+
+            GLint maxUnits = 0;
+            glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &maxUnits);
+            if (maxUnits > 0)
+                mMaxTextureImageUnits = maxUnits;
+            else
+            {
+                Log(Debug::Warning)
+                    << "Warning: Could not get GL_MAX_TEXTURE_IMAGE_UNITS. Using default of 8 (OpenGL 2.0 minimum).";
+                mMaxTextureImageUnits = 8;
+            }
+
+            graphicsContext->releaseContext();
         }
 
         int getMaxTextureImageUnits() const
@@ -160,9 +205,25 @@ namespace
             return mMaxTextureImageUnits;
         }
 
+        float getParsedVersion() const { return mParsedVersion; }
+
     private:
         int mMaxTextureImageUnits = 0;
+        float mParsedVersion = 0.f;
     };
+
+#ifdef __APPLE__
+    bool shouldShowLegacyOpenGLWarning(const std::filesystem::path& userConfigPath)
+    {
+        return !std::filesystem::exists(userConfigPath / "legacy-opengl-warning-dismissed");
+    }
+
+    void setLegacyOpenGLWarningDismissed(const std::filesystem::path& userConfigPath)
+    {
+        std::ofstream stream(userConfigPath / "legacy-opengl-warning-dismissed", std::ios::out | std::ios::trunc);
+        stream << "1\n";
+    }
+#endif
 
     void reportStats(unsigned frameNumber, osgViewer::Viewer& viewer, std::ostream& stream)
     {
@@ -378,6 +439,7 @@ OMW::Engine::Engine(Files::ConfigurationManager& configurationManager)
     , mNewGame(false)
     , mCfgMgr(configurationManager)
     , mGlMaxTextureImageUnits(0)
+    , mOpenGL1Fallback(false)
 {
 #if SDL_VERSION_ATLEAST(2, 24, 0)
     SDL_SetHint(SDL_HINT_MAC_OPENGL_ASYNC_DISPATCH, "1");
@@ -521,11 +583,13 @@ void OMW::Engine::createWindow()
 
     SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, Settings::video().mMinimizeOnFocusLoss ? "1" : "0");
 
+    int depthBits = 24;
+
     checkSDLError(SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8));
     checkSDLError(SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8));
     checkSDLError(SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8));
     checkSDLError(SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 0));
-    checkSDLError(SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24));
+    checkSDLError(SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, depthBits));
     if (Debug::shouldDebugOpenGL())
         checkSDLError(SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG));
 
@@ -555,6 +619,16 @@ void OMW::Engine::createWindow()
                 }
                 else
                 {
+#ifdef OPENMW_MACOSX_10_5
+                    if (depthBits > 16)
+                    {
+                        depthBits = 16;
+                        Log(Debug::Warning) << "Warning: SDL window creation failed with a 24-bit depth buffer,"
+                                            << " retrying with 16-bit depth";
+                        checkSDLError(SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, depthBits));
+                        continue;
+                    }
+#endif
                     std::stringstream error;
                     error << "Failed to create SDL window: " << SDL_GetError();
                     throw std::runtime_error(error.str());
@@ -690,6 +764,20 @@ void OMW::Engine::createWindow()
 
     mViewer->realize();
     mGlMaxTextureImageUnits = identifyOp->getMaxTextureImageUnits();
+    mOpenGL1Fallback = identifyOp->getParsedVersion() > 0.f && identifyOp->getParsedVersion() < 2.0f;
+    if (mOpenGL1Fallback)
+        Log(Debug::Warning) << "OpenGL 1.x fallback mode enabled for runtime capability guards.";
+
+#ifdef __APPLE__
+    if (mOpenGL1Fallback && shouldShowLegacyOpenGLWarning(mCfgMgr.getUserConfigPath()))
+    {
+        const LegacyOpenGLWarningResult warningResult = showLegacyOpenGLWarningDialog();
+        if (warningResult.mDontRemindAgain)
+            setLegacyOpenGLWarningDismissed(mCfgMgr.getUserConfigPath());
+        if (!warningResult.mContinue)
+            throw std::runtime_error("OpenMW aborted because no OpenGL 2.0 support was detected.");
+    }
+#endif
 
     mViewer->getEventQueue()->getCurrentEventState()->setWindowRectangle(
         0, 0, graphicsWindow->getTraits()->width, graphicsWindow->getTraits()->height);
@@ -740,6 +828,9 @@ void OMW::Engine::prepareEngine()
 
     mResourceSystem = std::make_unique<Resource::ResourceSystem>(
         mVFS.get(), Settings::cells().mCacheExpiryDelay, &mEncoder.get()->getStatelessEncoder());
+    if (Settings::cells().mResourceCacheMaxEntries > 0)
+        mResourceSystem->setMaxCacheSize(static_cast<std::size_t>(Settings::cells().mResourceCacheMaxEntries));
+    mResourceSystem->getSceneManager()->setOpenGL1Fallback(mOpenGL1Fallback);
     mResourceSystem->getSceneManager()->getShaderManager().setMaxTextureUnits(mGlMaxTextureImageUnits);
     mResourceSystem->getSceneManager()->setUnRefImageDataAfterApply(
         false); // keep to Off for now to allow better state sharing
@@ -808,6 +899,16 @@ void OMW::Engine::prepareEngine()
 
     osg::GLExtensions& exts = SceneUtil::getGLExtensions();
     bool shadersSupported = exts.glslLanguageVersion >= 1.2f;
+
+#if defined(OPENMW_MACOSX_10_5)
+    shadersSupported = false;
+    Log(Debug::Info) << "OPENMW_MACOSX_10_5: Disabling shaders entirely";
+
+    Settings::shaders().mForceShaders.set(false);
+    Settings::shaders().mLightingMethod.set(SceneUtil::LightingMethod::FFP);
+    Settings::shaders().mSoftParticles.set(false);
+    Settings::water().mShader.set(false);
+#endif
 
 #if OSG_VERSION_LESS_THAN(3, 6, 6)
     // hack fix for https://github.com/openscenegraph/OpenSceneGraph/issues/1028

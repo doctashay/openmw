@@ -760,6 +760,7 @@ namespace MWRender
 
     Sun::Sun(osg::Group* parentNode, Resource::SceneManager& sceneManager)
         : CelestialBody(parentNode, 1.0f, 1, Mask_Sun)
+        , mForceShaders(sceneManager.getForceShaders())
         , mUpdater(new SunUpdater)
     {
         mTransform->addUpdateCallback(mUpdater);
@@ -849,8 +850,10 @@ namespace MWRender
 
     void Sun::setSunglare(bool enabled)
     {
-        mSunGlareNode->setNodeMask(enabled ? ~0u : 0);
-        mSunFlashNode->setNodeMask(enabled ? ~0u : 0);
+        if (mSunGlareNode)
+            mSunGlareNode->setNodeMask(enabled ? ~0u : 0);
+        if (mSunFlashNode)
+            mSunFlashNode->setNodeMask(enabled ? ~0u : 0);
     }
 
     osg::ref_ptr<osg::OcclusionQueryNode> Sun::createOcclusionQueryNode(osg::Group* parent, bool queryVisible)
@@ -908,14 +911,24 @@ namespace MWRender
 
     void Sun::createSunFlash(Resource::ImageManager& imageManager)
     {
-        constexpr VFS::Path::NormalizedView image("textures/tx_sun_flash_grey_05.dds");
+        osg::ref_ptr<osg::Group> group(new osg::Group);
+        mTransform->addChild(group);
+        mSunFlashNode = group;
+
+#if defined(OPENMW_MACOSX_10_5)
+        if (!mForceShaders)
+        {
+            mSunFlashNode->setNodeMask(0);
+            return;
+        }
+#endif
+
+        const VFS::Path::NormalizedView image
+            = mForceShaders ? VFS::Path::NormalizedView("textures/tx_sun_flash_grey_05.dds")
+                            : VFS::Path::NormalizedView("textures/tx_sun_05.dds");
         osg::ref_ptr<osg::Texture2D> tex = new osg::Texture2D(imageManager.getImage(image));
         tex->setWrap(osg::Texture::WRAP_S, osg::Texture::CLAMP_TO_EDGE);
         tex->setWrap(osg::Texture::WRAP_T, osg::Texture::CLAMP_TO_EDGE);
-
-        osg::ref_ptr<osg::Group> group(new osg::Group);
-
-        mTransform->addChild(group);
 
         const float scale = 2.6f;
         osg::ref_ptr<osg::Geometry> geom = createTexturedQuad(1, scale);
@@ -926,11 +939,21 @@ namespace MWRender
         stateset->setTextureAttributeAndModes(0, tex);
         stateset->setTextureAttributeAndModes(0, new SceneUtil::TextureType("diffuseMap"), osg::StateAttribute::ON);
         stateset->setMode(GL_DEPTH_TEST, osg::StateAttribute::OFF);
+        stateset->setMode(GL_BLEND, osg::StateAttribute::ON);
+        stateset->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
+        if (!mForceShaders)
+        {
+            osg::ref_ptr<osg::AlphaFunc> alphaFunc = new osg::AlphaFunc;
+            alphaFunc->setFunction(osg::AlphaFunc::GREATER, 0.8f);
+            stateset->setAttributeAndModes(alphaFunc);
+        }
         stateset->setRenderBinDetails(RenderBin_SunGlare, "RenderBin");
         stateset->setNestRenderBins(false);
+        osg::ref_ptr<osg::BlendFunc> blendFunc = new osg::BlendFunc;
+        blendFunc->setSource(osg::BlendFunc::SRC_ALPHA);
+        blendFunc->setDestination(osg::BlendFunc::ONE);
+        stateset->setAttributeAndModes(blendFunc);
         stateset->addUniform(new osg::Uniform("pass", static_cast<int>(Pass::Sun)));
-
-        mSunFlashNode = group;
 
         mSunFlashCallback = new SunFlashCallback(mOcclusionQueryVisiblePixels, mOcclusionQueryTotalPixels);
         mSunFlashNode->addCullCallback(mSunFlashCallback);
@@ -947,6 +970,18 @@ namespace MWRender
 
     void Sun::createSunGlare()
     {
+        osg::ref_ptr<osg::Group> disabledGroup = new osg::Group;
+        mSunGlareNode = disabledGroup;
+        mTransform->addChild(disabledGroup);
+
+#if defined(OPENMW_MACOSX_10_5)
+        if (!mForceShaders)
+        {
+            mSunGlareNode->setNodeMask(0);
+            return;
+        }
+#endif
+
         osg::ref_ptr<osg::Camera> camera = new osg::Camera;
         camera->setProjectionMatrix(osg::Matrix::identity());
         camera->setReferenceFrame(osg::Transform::ABSOLUTE_RF); // add to skyRoot instead?
@@ -967,6 +1002,7 @@ namespace MWRender
         stateset->setRenderBinDetails(RenderBin_SunGlare, "RenderBin");
         stateset->setNestRenderBins(false);
         stateset->setMode(GL_DEPTH_TEST, osg::StateAttribute::OFF);
+        stateset->setMode(GL_BLEND, osg::StateAttribute::ON);
         stateset->addUniform(new osg::Uniform("pass", static_cast<int>(Pass::Sunglare)));
 
         // set up additive blending

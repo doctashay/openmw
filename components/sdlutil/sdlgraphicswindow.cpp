@@ -127,8 +127,22 @@ namespace SDLUtil
         mContext = SDL_GL_CreateContext(mWindow);
         if (!mContext)
         {
-            OSG_FATAL << "Error: Unable to create OpenGL graphics context: " << SDL_GetError() << std::endl;
-            return;
+#ifdef OPENMW_MACOSX_10_5
+            Log(Debug::Warning)
+                << "Initial GL 2.0 compatibility context request failed; retrying with legacy context attributes";
+            SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
+            SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, 0);
+            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 0);
+            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+            mContext = SDL_GL_CreateContext(mWindow);
+#endif
+
+            if (!mContext)
+            {
+                OSG_FATAL << "Error: Unable to create a usable OpenGL graphics context: " << SDL_GetError()
+                          << std::endl;
+                return;
+            }
         }
 
 #ifdef OPENMW_GL4ES_MANUAL_INIT
