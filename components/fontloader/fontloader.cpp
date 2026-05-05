@@ -16,6 +16,7 @@
 #include <MyGUI_XmlDocument.h>
 
 #include <components/debug/debuglog.hpp>
+#include <components/misc/endianness.hpp>
 
 #include <components/fallback/fallback.hpp>
 
@@ -380,11 +381,15 @@ namespace Gui
         file->read((char*)&fontSize, sizeof(fontSize));
         if (!file->good())
             fail(*file, fileName, "File too small to be a valid font");
+        if constexpr (Misc::IS_BIG_ENDIAN)
+            fontSize = Misc::fromLittleEndian(fontSize);
 
         int one;
         file->read((char*)&one, sizeof(one));
         if (!file->good())
             fail(*file, fileName, "File too small to be a valid font");
+        if constexpr (Misc::IS_BIG_ENDIAN)
+            one = Misc::fromLittleEndian(one);
 
         if (one != 1)
             fail(*file, fileName, "Unexpected value");
@@ -392,6 +397,8 @@ namespace Gui
         file->read((char*)&one, sizeof(one));
         if (!file->good())
             fail(*file, fileName, "File too small to be a valid font");
+        if constexpr (Misc::IS_BIG_ENDIAN)
+            one = Misc::fromLittleEndian(one);
 
         if (one != 1)
             fail(*file, fileName, "Unexpected value");
@@ -405,6 +412,12 @@ namespace Gui
         file->read((char*)data, sizeof(data));
         if (!file->good())
             fail(*file, fileName, "File too small to be a valid font");
+        if constexpr (Misc::IS_BIG_ENDIAN)
+        {
+            uint32_t* p = reinterpret_cast<uint32_t*>(data);
+            for (size_t i = 0; i < sizeof(data) / sizeof(uint32_t); ++i)
+                Misc::swapEndiannessInplace(p[i]);
+        }
 
         file.reset();
 
@@ -417,6 +430,11 @@ namespace Gui
         int width, height;
         bitmapFile->read((char*)&width, sizeof(int));
         bitmapFile->read((char*)&height, sizeof(int));
+        if constexpr (Misc::IS_BIG_ENDIAN)
+        {
+            width = Misc::fromLittleEndian(width);
+            height = Misc::fromLittleEndian(height);
+        }
 
         if (!bitmapFile->good())
             fail(*bitmapFile, bitmapFilename, "File too small to be a valid bitmap");
