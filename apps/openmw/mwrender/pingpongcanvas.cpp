@@ -41,9 +41,12 @@ namespace MWRender
         mFallbackStateSet->addUniform(new osg::Uniform("lastShader", 0));
         mFallbackStateSet->addUniform(new osg::Uniform("scaling", osg::Vec2f(1, 1)));
 
-        mMultiviewResolveProgram = shaderManager.getProgram("multiview_resolve");
-        mMultiviewResolveStateSet->setAttributeAndModes(mMultiviewResolveProgram);
-        mMultiviewResolveStateSet->addUniform(new osg::Uniform("lastShader", 0));
+        if (Stereo::getMultiview())
+        {
+            mMultiviewResolveProgram = shaderManager.getProgram("multiview_resolve");
+            mMultiviewResolveStateSet->setAttributeAndModes(mMultiviewResolveProgram);
+            mMultiviewResolveStateSet->addUniform(new osg::Uniform("lastShader", 0));
+        }
     }
 
     void PingPongCanvas::setPasses(Fx::DispatchArray&& passes)

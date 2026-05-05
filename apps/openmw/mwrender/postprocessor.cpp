@@ -190,10 +190,12 @@ namespace MWRender
         ext->glDisablei = nullptr;
 #endif
 
-        if (ext->glDisablei)
+        if (ext->glDisablei && ext->glColorMaski)
             mNormalsSupported = true;
-        else
+        else if (!ext->glDisablei)
             Log(Debug::Error) << "'glDisablei' unsupported, pass normals will not be available to shaders.";
+        else if (!ext->glColorMaski)
+            Log(Debug::Error) << "'glColorMaski' unsupported (e.g. OpenGL 2.0), pass normals disabled.";
 
         mGLSLVersion = static_cast<int>(ext->glslLanguageVersion * 100);
         mUBO = ext->isUniformBufferObjectSupported && mGLSLVersion >= 330;
