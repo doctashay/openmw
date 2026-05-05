@@ -50,37 +50,6 @@ if(NOT OPENMW_USE_SYSTEM_BULLET)
     set(BULLET_LIBRARIES BulletCollision LinearMath PARENT_SCOPE)
 endif()
 
-if(NOT OPENMW_USE_SYSTEM_MYGUI)
-    if(OPENMW_MACOSX_10_5)
-        message(STATUS "Building MyGUI internally - requires OSG to be built first")
-        message(STATUS "If OSG build fails, MyGUI build will also fail")
-    endif()
-
-    set(MYGUI_RENDERSYSTEM 4 CACHE STRING "")
-    set(MYGUI_DISABLE_PLUGINS TRUE CACHE BOOL "")
-    set(MYGUI_BUILD_DEMOS OFF CACHE BOOL "")
-    set(MYGUI_BUILD_PLUGINS OFF CACHE BOOL "")
-    set(MYGUI_BUILD_TOOLS OFF CACHE BOOL "")
-    set(MYGUI_DONT_USE_OBSOLETE ON CACHE BOOL "")
-
-    if(MYGUI_STATIC)
-        set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-    else()
-        set(BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
-    endif()
-
-    include(FetchContent)
-    FetchContent_Declare(mygui
-        URL https://github.com/MyGUI/mygui/archive/refs/tags/MyGUI3.4.3.zip
-        URL_HASH SHA512=c804ef665e786076582367f171082cd2181fdbd214300ddcca4a4245c5a0f45e62e72778ee2d96ec46b393e22477dd729f9bb3006e6eecbf536674e34a057721
-        SOURCE_DIR fetched/mygui
-    )
-    FetchContent_MakeAvailable(mygui)
-
-    set(MyGUI_INCLUDE_DIRS ${mygui_SOURCE_DIR}/MyGUIEngine/include PARENT_SCOPE)
-    set(MyGUI_LIBRARIES MyGUIEngine PARENT_SCOPE)
-endif()
-
 if(NOT OPENMW_USE_SYSTEM_OSG)
     # OSG internal build requires several dependencies for plugins
     if(OPENMW_MACOSX_10_5)
@@ -169,117 +138,62 @@ if(NOT OPENMW_USE_SYSTEM_OSG)
         endif()
     endif()
 
-    # OSGoS branch 3.6
-    include(FetchContent)
-    FetchContent_Declare(osg
-        URL https://github.com/OpenMW/osg/archive/01cc2b585c8456a4ff843066b7e1a8715558289f.zip
-        URL_HASH SHA512=9b0a94c1c1d99c767f1857629d43c7a53bfcb74ef760993a121567831e168a1ebbfc10b0c67d7f2241c7b6c6dab2d0e6b876d9f17aca0fabe1a8c86b2279f956
-        SOURCE_DIR fetched/osg
-    )
-    FetchContent_MakeAvailable(osg)
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/osg/CMakeLists.txt)
+        message(STATUS "Using local OSG from extern/osg")
+        add_subdirectory(osg)
+        set(osg_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/osg)
+        set(osg_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/osg)
+    else()
+        include(FetchContent)
+        FetchContent_Declare(osg
+            URL https://github.com/OpenMW/osg/archive/01cc2b585c8456a4ff843066b7e1a8715558289f.zip
+            URL_HASH SHA512=9b0a94c1c1d99c767f1857629d43c7a53bfcb74ef760993a121567831e168a1ebbfc10b0c67d7f2241c7b6c6dab2d0e6b876d9f17aca0fabe1a8c86b2279f956
+            SOURCE_DIR fetched/osg
+        )
+        FetchContent_MakeAvailable(osg)
 
-    # Patch OSG for macOS 10.5 compatibility
-    if(OPENMW_MACOSX_10_5)
-        # Patch 1: PThread.cpp - SYS_thread_selfid is not available
-        set(OSG_PTHREAD_FILE "${osg_SOURCE_DIR}/src/OpenThreads/pthreads/PThread.cpp")
-        if(EXISTS "${OSG_PTHREAD_FILE}")
-            file(READ "${OSG_PTHREAD_FILE}" OSG_PTHREAD_CONTENT)
-            # Replace syscall(SYS_thread_selfid) with pthread_self() for macOS 10.5
-            # SYS_thread_selfid was introduced in macOS 10.6, not available in 10.5
-            string(REPLACE 
-                "return (size_t)::syscall(SYS_thread_selfid);"
-                "return reinterpret_cast<size_t>(pthread_self());"
-                OSG_PTHREAD_CONTENT "${OSG_PTHREAD_CONTENT}")
-            file(WRITE "${OSG_PTHREAD_FILE}" "${OSG_PTHREAD_CONTENT}")
-            message(STATUS "Patched OSG PThread.cpp for macOS 10.5 compatibility (SYS_thread_selfid -> pthread_self)")
-        else()
-            message(WARNING "OSG PThread.cpp not found at ${OSG_PTHREAD_FILE} - patch may not be applied")
-        endif()
-
-        # Patch 2: GraphicsWindowCocoa.mm - NSApplicationDelegate and setWantsBestResolutionOpenGLSurface
-        set(OSG_COCOA_FILE "${osg_SOURCE_DIR}/src/osgViewer/GraphicsWindowCocoa.mm")
-        if(EXISTS "${OSG_COCOA_FILE}")
-            file(READ "${OSG_COCOA_FILE}" OSG_COCOA_CONTENT)
-            
-            # Check if patch is needed
-            string(FIND "${OSG_COCOA_CONTENT}" "NSApplicationDelegate" FOUND_NSAPPLICATIONDELEGATE)
-            if(NOT FOUND_NSAPPLICATIONDELEGATE EQUAL -1)
-                # NSApplicationDelegate protocol was introduced in macOS 10.6, remove it for 10.5
-                # Use regex to match any whitespace variations
-                string(REGEX REPLACE
-                    "<[ ]*NSApplicationDelegate[ ]*>"
-                    ""
-                    OSG_COCOA_CONTENT "${OSG_COCOA_CONTENT}")
-                # Also try direct string replacements for common patterns
-                string(REPLACE 
-                    "<NSApplicationDelegate>"
-                    ""
-                    OSG_COCOA_CONTENT "${OSG_COCOA_CONTENT}")
-                string(REPLACE 
-                    " <NSApplicationDelegate>"
-                    ""
-                    OSG_COCOA_CONTENT "${OSG_COCOA_CONTENT}")
-                string(REPLACE 
-                    "< NSApplicationDelegate >"
-                    ""
-                    OSG_COCOA_CONTENT "${OSG_COCOA_CONTENT}")
-                message(STATUS "Removed NSApplicationDelegate protocol from GraphicsWindowCocoa.mm")
-            else()
-                message(STATUS "NSApplicationDelegate not found in GraphicsWindowCocoa.mm (may already be patched)")
+        if(OPENMW_MACOSX_10_5)
+            set(OSG_PTHREAD_FILE "${osg_SOURCE_DIR}/src/OpenThreads/pthreads/PThread.cpp")
+            if(EXISTS "${OSG_PTHREAD_FILE}")
+                file(READ "${OSG_PTHREAD_FILE}" OSG_PTHREAD_CONTENT)
+                string(REPLACE
+                    "return (size_t)::syscall(SYS_thread_selfid);"
+                    "return reinterpret_cast<size_t>(pthread_self());"
+                    OSG_PTHREAD_CONTENT "${OSG_PTHREAD_CONTENT}")
+                file(WRITE "${OSG_PTHREAD_FILE}" "${OSG_PTHREAD_CONTENT}")
+                message(STATUS "Patched fetched OSG PThread.cpp for macOS 10.5 compatibility")
             endif()
-            
-            # setWantsBestResolutionOpenGLSurface was introduced in macOS 10.7, comment it out for 10.5
-            string(FIND "${OSG_COCOA_CONTENT}" "setWantsBestResolutionOpenGLSurface" FOUND_SETWANTS)
-            if(NOT FOUND_SETWANTS EQUAL -1)
-                string(REPLACE 
+
+            set(OSG_COCOA_FILE "${osg_SOURCE_DIR}/src/osgViewer/GraphicsWindowCocoa.mm")
+            if(EXISTS "${OSG_COCOA_FILE}")
+                file(READ "${OSG_COCOA_FILE}" OSG_COCOA_CONTENT)
+                string(REGEX REPLACE "<[ ]*NSApplicationDelegate[ ]*>" "" OSG_COCOA_CONTENT "${OSG_COCOA_CONTENT}")
+                string(REPLACE
                     "[_view setWantsBestResolutionOpenGLSurface: NO];"
                     "// [_view setWantsBestResolutionOpenGLSurface: NO]; // Not available on macOS 10.5"
                     OSG_COCOA_CONTENT "${OSG_COCOA_CONTENT}")
-                string(REPLACE 
+                string(REPLACE
                     "[_view setWantsBestResolutionOpenGLSurface:NO];"
                     "// [_view setWantsBestResolutionOpenGLSurface:NO]; // Not available on macOS 10.5"
                     OSG_COCOA_CONTENT "${OSG_COCOA_CONTENT}")
-                message(STATUS "Commented out setWantsBestResolutionOpenGLSurface in GraphicsWindowCocoa.mm")
+                file(WRITE "${OSG_COCOA_FILE}" "${OSG_COCOA_CONTENT}")
+                message(STATUS "Patched fetched OSG GraphicsWindowCocoa.mm for macOS 10.5 compatibility")
             endif()
-            
-            file(WRITE "${OSG_COCOA_FILE}" "${OSG_COCOA_CONTENT}")
-            
-            # Verify patch was applied
-            file(READ "${OSG_COCOA_FILE}" OSG_COCOA_VERIFY)
-            string(FIND "${OSG_COCOA_VERIFY}" "NSApplicationDelegate" VERIFY_FOUND)
-            if(NOT VERIFY_FOUND EQUAL -1)
-                message(WARNING "WARNING: NSApplicationDelegate still found in GraphicsWindowCocoa.mm after patching!")
-                message(WARNING "Patch may have failed. File location: ${OSG_COCOA_FILE}")
-            else()
-                message(STATUS "Verified: NSApplicationDelegate successfully removed from GraphicsWindowCocoa.mm")
-            endif()
-            
-            message(STATUS "Patched OSG GraphicsWindowCocoa.mm for macOS 10.5 compatibility")
-        else()
-            message(WARNING "OSG GraphicsWindowCocoa.mm not found at ${OSG_COCOA_FILE} - patch may not be applied")
-        endif()
 
-        # Patch 3: DarwinUtils.mm - CGDisplayMode APIs were introduced in macOS 10.6
-        # These APIs are not available on macOS 10.5, so we stub out the function
-        set(OSG_DARWIN_FILE "${osg_SOURCE_DIR}/src/osgViewer/DarwinUtils.mm")
-        if(EXISTS "${OSG_DARWIN_FILE}")
-            file(READ "${OSG_DARWIN_FILE}" OSG_DARWIN_CONTENT)
-            # Add early return at the start of findBestDisplayModeFor for macOS 10.5
-            # Replace in order of appearance in the file
-            # First, handle the first API call (line 165)
-            string(REPLACE 
-                "CFArrayRef availableModes = CGDisplayCopyAllDisplayModes (displayid, NULL);"
-                "#if MAC_OS_X_VERSION_MIN_REQUIRED >= 1060\n        CFArrayRef availableModes = CGDisplayCopyAllDisplayModes (displayid, NULL);\n#else\n        // CGDisplayMode APIs not available on macOS 10.5 - return early\n        return false;\n#endif"
-                OSG_DARWIN_CONTENT "${OSG_DARWIN_CONTENT}")
-            # Then handle the CGDisplayModeRef type declaration (line 168)
-            string(REPLACE 
-                "CGDisplayModeRef best_match(NULL);"
-                "#if MAC_OS_X_VERSION_MIN_REQUIRED >= 1060\n        CGDisplayModeRef best_match(NULL);\n#else\n        // Already returned above for 10.5\n#endif"
-                OSG_DARWIN_CONTENT "${OSG_DARWIN_CONTENT}")
-            file(WRITE "${OSG_DARWIN_FILE}" "${OSG_DARWIN_CONTENT}")
-            message(STATUS "Patched OSG DarwinUtils.mm for macOS 10.5 compatibility (CGDisplayMode APIs - early return)")
-        else()
-            message(WARNING "OSG DarwinUtils.mm not found at ${OSG_DARWIN_FILE} - patch may not be applied")
+            set(OSG_DARWIN_FILE "${osg_SOURCE_DIR}/src/osgViewer/DarwinUtils.mm")
+            if(EXISTS "${OSG_DARWIN_FILE}")
+                file(READ "${OSG_DARWIN_FILE}" OSG_DARWIN_CONTENT)
+                string(REPLACE
+                    "CFArrayRef availableModes = CGDisplayCopyAllDisplayModes (displayid, NULL);"
+                    "#if MAC_OS_X_VERSION_MIN_REQUIRED >= 1060\n        CFArrayRef availableModes = CGDisplayCopyAllDisplayModes (displayid, NULL);\n#else\n        return false;\n#endif"
+                    OSG_DARWIN_CONTENT "${OSG_DARWIN_CONTENT}")
+                string(REPLACE
+                    "CGDisplayModeRef best_match(NULL);"
+                    "#if MAC_OS_X_VERSION_MIN_REQUIRED >= 1060\n        CGDisplayModeRef best_match(NULL);\n#else\n        // Already returned above for 10.5\n#endif"
+                    OSG_DARWIN_CONTENT "${OSG_DARWIN_CONTENT}")
+                file(WRITE "${OSG_DARWIN_FILE}" "${OSG_DARWIN_CONTENT}")
+                message(STATUS "Patched fetched OSG DarwinUtils.mm for macOS 10.5 compatibility")
+            endif()
         endif()
     endif()
     set(OPENSCENEGRAPH_INCLUDE_DIRS ${osg_SOURCE_DIR}/include ${osg_BINARY_DIR}/include PARENT_SCOPE)
@@ -292,6 +206,48 @@ if(NOT OPENMW_USE_SYSTEM_OSG)
         string(TOUPPER ${_name} _name_uc)
         set(${_name_uc}_LIBRARY ${_name} PARENT_SCOPE)
     endforeach()
+endif()
+
+if(NOT OPENMW_USE_SYSTEM_MYGUI)
+    if(OPENMW_MACOSX_10_5)
+        message(STATUS "Building MyGUI internally")
+    endif()
+
+    set(MYGUI_RENDERSYSTEM 4 CACHE STRING "")
+    set(MYGUI_DISABLE_PLUGINS TRUE CACHE BOOL "")
+    set(MYGUI_BUILD_DEMOS OFF CACHE BOOL "")
+    set(MYGUI_BUILD_PLUGINS OFF CACHE BOOL "")
+    set(MYGUI_BUILD_TOOLS OFF CACHE BOOL "")
+    set(MYGUI_DONT_USE_OBSOLETE ON CACHE BOOL "")
+
+    if(MYGUI_STATIC)
+        set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    else()
+        set(BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
+    endif()
+
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/mygui/CMakeLists.txt)
+        message(STATUS "Using local MyGUI from extern/mygui")
+        set(MYGUI_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/mygui CACHE PATH "" FORCE)
+        if(NOT OPENMW_USE_SYSTEM_OSG)
+            set(OpenSceneGraph_DIR ${CMAKE_CURRENT_BINARY_DIR}/osg CACHE PATH "OSG build dir for MyGUI" FORCE)
+            list(APPEND CMAKE_PREFIX_PATH ${CMAKE_CURRENT_BINARY_DIR}/osg)
+        endif()
+        add_subdirectory(mygui)
+        set(MyGUI_INCLUDE_DIRS ${MYGUI_SOURCE_DIR}/MyGUIEngine/include PARENT_SCOPE)
+        set(MyGUI_LIBRARIES MyGUIEngine PARENT_SCOPE)
+    else()
+        include(FetchContent)
+        FetchContent_Declare(mygui
+            URL https://github.com/MyGUI/mygui/archive/refs/tags/MyGUI3.4.3.zip
+            URL_HASH SHA512=c804ef665e786076582367f171082cd2181fdbd214300ddcca4a4245c5a0f45e62e72778ee2d96ec46b393e22477dd729f9bb3006e6eecbf536674e34a057721
+            SOURCE_DIR fetched/mygui
+        )
+        FetchContent_MakeAvailable(mygui)
+
+        set(MyGUI_INCLUDE_DIRS ${mygui_SOURCE_DIR}/MyGUIEngine/include PARENT_SCOPE)
+        set(MyGUI_LIBRARIES MyGUIEngine PARENT_SCOPE)
+    endif()
 endif()
 
 if(NOT OPENMW_USE_SYSTEM_RECASTNAVIGATION)

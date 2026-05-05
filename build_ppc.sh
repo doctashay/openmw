@@ -69,10 +69,11 @@ if [ -f "${ROOT_DIR}/.gitmodules" ]; then
     git -C "$ROOT_DIR" submodule update --init extern/osg extern/mygui 2>/dev/null || \
         echo "Note: one or more submodules not registered; CMake will use FetchContent for missing ones."
 fi
-[ -f "${ROOT_DIR}/extern/osg/CMakeLists.txt" ] || {
-    echo "ERROR: OSG source not found at extern/osg. Run: git submodule update --init extern/osg"
-    exit 1
-}
+if [ -f "${ROOT_DIR}/extern/osg/CMakeLists.txt" ]; then
+    echo "Using local OSG source tree from extern/osg."
+else
+    echo "Local OSG source tree not found; CMake will use FetchContent."
+fi
 echo ""
 
 # --- Build directory -----------------------------------------------------
@@ -141,7 +142,11 @@ if [ -n "$OSG_MYGUI_ROOT" ] && [ -d "$OSG_MYGUI_ROOT" ]; then
     )
     echo "Using prebuilt OSG/MyGUI from: $OSG_MYGUI_ROOT"
 else
-    echo "Building static OSG/MyGUI in-tree from extern/osg and extern/mygui."
+    if [ -f "${ROOT_DIR}/extern/osg/CMakeLists.txt" ] || [ -f "${ROOT_DIR}/extern/mygui/CMakeLists.txt" ]; then
+        echo "Building OSG/MyGUI in-tree from local extern/ trees when present."
+    else
+        echo "Building OSG/MyGUI in-tree via FetchContent."
+    fi
     echo "OSG build mode: RelWithDebInfo with -O2 and no CPU-specific tuning."
 fi
 

@@ -80,14 +80,13 @@ if [ -f "${ROOT_DIR}/.gitmodules" ]; then
         echo "Note: extern/mygui submodule not registered in this repo; CMake will use FetchContent for MyGUI."
     }
 fi
-if [ ! -d "$OSG_SOURCE_DIR" ] || [ ! -f "${OSG_SOURCE_DIR}/CMakeLists.txt" ]; then
-    echo "ERROR: OSG source not found at $OSG_SOURCE_DIR"
-    echo "Ensure submodules are inited: git submodule update --init extern/osg extern/mygui"
-    echo "See SUBMODULES.md for using your OSG/MyGUI fork and Darwin patches."
-    exit 1
+if [ -d "$OSG_SOURCE_DIR" ] && [ -f "${OSG_SOURCE_DIR}/CMakeLists.txt" ]; then
+    echo "Using local OSG source tree from extern/osg."
+else
+    echo "Local OSG source tree not found; CMake will use FetchContent."
 fi
 if [ ! -d "$MYGUI_SOURCE_DIR" ] || [ ! -f "${MYGUI_SOURCE_DIR}/CMakeLists.txt" ]; then
-    echo "WARNING: MyGUI submodule not found at $MYGUI_SOURCE_DIR; CMake will use FetchContent for MyGUI."
+    echo "MyGUI source tree not found at $MYGUI_SOURCE_DIR; CMake will use FetchContent for MyGUI."
 fi
 echo ""
 
@@ -167,7 +166,11 @@ if [ -n "$OSG_MYGUI_ROOT" ] && [ -d "$OSG_MYGUI_ROOT" ]; then
     )
     echo "Using prebuilt OSG and MyGUI from: $OSG_MYGUI_ROOT (must be ppc64)"
 else
-    echo "Building OSG and MyGUI in-tree from extern/osg and extern/mygui (submodules) for ppc64."
+    if [ -f "${OSG_SOURCE_DIR}/CMakeLists.txt" ] || [ -f "${MYGUI_SOURCE_DIR}/CMakeLists.txt" ]; then
+        echo "Building OSG/MyGUI in-tree from local extern/ trees when present for ppc64."
+    else
+        echo "Building OSG/MyGUI in-tree via FetchContent for ppc64."
+    fi
 fi
 
 # Add ccache if available
