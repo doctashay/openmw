@@ -54,7 +54,12 @@ namespace SceneUtil
 
     void GetGLExtensionsOperation::operator()(osg::GraphicsContext* graphicsContext)
     {
+        if (!graphicsContext || !graphicsContext->makeCurrent())
+            throw std::runtime_error("GetGLExtensionsOperation: no current GL context available");
+
         auto [itr, _] = sGLExtensions.emplace(graphicsContext->getState()->get<osg::GLExtensions>());
         (*itr)->addObserver(&GLExtensionsObserver::sInstance);
+
+        graphicsContext->releaseContext();
     }
 }
