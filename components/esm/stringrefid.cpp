@@ -16,7 +16,12 @@ namespace ESM
     {
         using StringsSet = std::unordered_set<std::string, Misc::StringUtils::CiHash, Misc::StringUtils::CiEqual>;
 
-        const std::string emptyString;
+        // Use function to avoid unity build redefinition issues
+        const std::string& getEmptyString()
+        {
+            static const std::string emptyString;
+            return emptyString;
+        }
 
         Misc::ScopeGuarded<StringsSet>& getRefIds()
         {
@@ -47,7 +52,7 @@ namespace ESM
     }
 
     StringRefId::StringRefId()
-        : mValue(&emptyString)
+        : mValue(&getEmptyString())
     {
     }
 

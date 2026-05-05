@@ -35,6 +35,16 @@ namespace Fx
             { "bgra", GL_BGRA },
         } };
 
+        // GL_UNSIGNED_INT_24_8 might not be available on older OpenGL (macOS 10.5)
+#ifndef GL_UNSIGNED_INT_24_8
+    #ifdef GL_UNSIGNED_INT_24_8_EXT
+        #define GL_UNSIGNED_INT_24_8 GL_UNSIGNED_INT_24_8_EXT
+    #else
+        // Fallback: use standard value (0x84FA)
+        #define GL_UNSIGNED_INT_24_8 0x84FA
+    #endif
+#endif
+
         constexpr std::array<std::pair<std::string_view, int>, 10> SourceType = { {
             { "byte", GL_BYTE },
             { "unsigned_byte", GL_UNSIGNED_BYTE },

@@ -12,6 +12,19 @@
 #include <vector>
 
 #include <components/misc/endianness.hpp>
+
+// strnlen might not be available on macOS 10.5 - provide fallback
+// Check if we're building for macOS 10.5 (deployment target < 10.7)
+#if defined(__APPLE__) && defined(MAC_OS_X_VERSION_MIN_REQUIRED) && MAC_OS_X_VERSION_MIN_REQUIRED < 1070
+    // Fallback implementation for macOS 10.5/10.6 where strnlen may not be available
+    inline size_t strnlen(const char* s, size_t maxlen)
+    {
+        size_t len = 0;
+        while (len < maxlen && s[len] != '\0')
+            len++;
+        return len;
+    }
+#endif
 namespace ESM
 {
     enum RecordFlag
