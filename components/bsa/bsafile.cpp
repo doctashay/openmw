@@ -122,7 +122,9 @@ void BSAFile::readHeader(std::istream& input)
         // First 12 bytes
         uint32_t head[3];
 
-        input.read(reinterpret_cast<char*>(head), 12);
+        readAligned(input, head[0]);
+        readAligned(input, head[1]);
+        readAligned(input, head[2]);
 
         if (input.fail())
             fail(std::format("Failed to read head: {}", std::generic_category().message(errno)));
@@ -154,10 +156,13 @@ void BSAFile::readHeader(std::istream& input)
 
     // Read the offset info into a temporary buffer
     std::vector<uint32_t> offsets(3 * filenum);
-    input.read(reinterpret_cast<char*>(offsets.data()), 12 * filenum);
+    alignas(uint32_t) std::vector<char> offsetBuffer(12 * filenum);
+    input.read(offsetBuffer.data(), 12 * filenum);
 
     if (input.fail())
         fail(std::format("Failed to read offsets: {}", std::generic_category().message(errno)));
+
+    std::memcpy(offsets.data(), offsetBuffer.data(), 12 * filenum);
 
     // BSA files are little-endian, convert on big-endian systems
     if constexpr (Misc::IS_BIG_ENDIAN)
@@ -177,10 +182,13 @@ void BSAFile::readHeader(std::istream& input)
     assert(input.tellg() == std::streampos(12 + dirsize));
     std::vector<Hash> hashes(filenum);
     static_assert(sizeof(Hash) == 8);
-    input.read(reinterpret_cast<char*>(hashes.data()), 8 * filenum);
+    alignas(Hash) std::vector<char> hashBuffer(8 * filenum);
+    input.read(hashBuffer.data(), 8 * filenum);
 
     if (input.fail())
         fail(std::format("Failed to read hashes: {}", std::generic_category().message(errno)));
+
+    std::memcpy(hashes.data(), hashBuffer.data(), 8 * filenum);
 
     // Hash values are little-endian, convert on big-endian systems
     if constexpr (Misc::IS_BIG_ENDIAN)
