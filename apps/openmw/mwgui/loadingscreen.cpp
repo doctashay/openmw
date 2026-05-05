@@ -193,6 +193,9 @@ namespace MWGui
         mViewer->getSceneData()->setComputeBoundingSphereCallback(nullptr);
         mViewer->getSceneData()->dirtyBound();
 
+        if (mCopyFramebufferToTextureCallback)
+            mViewer->getCamera()->removeInitialDrawCallback(mCopyFramebufferToTextureCallback);
+
         setVisible(false);
 
         if (osgUtil::IncrementalCompileOperation* ico = mViewer->getIncrementalCompileOperation())
@@ -323,11 +326,6 @@ namespace MWGui
         {
             mLastWallpaperChangeTime = mTimer.time_m();
             changeWallpaper();
-        }
-
-        if (!mShowWallpaper && mLastRenderTime < mLoadingOnTime)
-        {
-            setupCopyFramebufferToTextureCallback();
         }
 
         MWBase::Environment::get().getInputManager()->update(0, true, true);
