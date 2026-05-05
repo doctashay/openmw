@@ -1,6 +1,7 @@
 #ifndef COMPONENTS_MISC_ENDIANNESS_H
 #define COMPONENTS_MISC_ENDIANNESS_H
 
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <type_traits>
@@ -37,6 +38,73 @@ namespace Misc
                 | ((v64 & 0x0000'00ff'0000'0000) >> 8) | ((v64 & 0x0000'0000'ff00'0000) << 8)
                 | ((v64 & 0x0000'0000'00ff'0000) << 24) | ((v64 & 0x0000'0000'0000'ff00) << 40) | (v64 << 56);
             std::memcpy(&v, &v64, sizeof(T));
+        }
+    }
+
+    inline void swapEndian16BufferInplace(void* data, std::size_t count)
+    {
+        auto* bytes = static_cast<unsigned char*>(data);
+        for (std::size_t i = 0; i < count; ++i, bytes += sizeof(std::uint16_t))
+        {
+            std::uint16_t value;
+            std::memcpy(&value, bytes, sizeof(value));
+            swapEndiannessInplace(value);
+            std::memcpy(bytes, &value, sizeof(value));
+        }
+    }
+
+    inline void swapEndian32BufferInplace(void* data, std::size_t count)
+    {
+        auto* bytes = static_cast<unsigned char*>(data);
+        for (std::size_t i = 0; i < count; ++i, bytes += sizeof(std::uint32_t))
+        {
+            std::uint32_t value;
+            std::memcpy(&value, bytes, sizeof(value));
+            swapEndiannessInplace(value);
+            std::memcpy(bytes, &value, sizeof(value));
+        }
+    }
+
+    inline void swapEndian32BufferInplaceStrided(void* data, std::size_t count, std::size_t stride)
+    {
+        if (stride == sizeof(std::uint32_t))
+        {
+            swapEndian32BufferInplace(data, count);
+            return;
+        }
+
+        auto* bytes = static_cast<unsigned char*>(data);
+        for (std::size_t i = 0; i < count; ++i, bytes += stride)
+        {
+            std::uint32_t value;
+            std::memcpy(&value, bytes, sizeof(value));
+            swapEndiannessInplace(value);
+            std::memcpy(bytes, &value, sizeof(value));
+        }
+    }
+
+    template <typename T>
+    void swapEndiannessBulkInplace(T* data, std::size_t count)
+    {
+        static_assert(std::is_arithmetic_v<T>);
+        static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4 || sizeof(T) == 8);
+
+        if constexpr (sizeof(T) == 1)
+        {
+            return;
+        }
+        else if constexpr (sizeof(T) == 2)
+        {
+            swapEndian16BufferInplace(data, count);
+        }
+        else if constexpr (sizeof(T) == 4)
+        {
+            swapEndian32BufferInplace(data, count);
+        }
+        else
+        {
+            for (std::size_t i = 0; i < count; ++i)
+                swapEndiannessInplace(data[i]);
         }
     }
 

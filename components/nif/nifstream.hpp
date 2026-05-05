@@ -48,8 +48,7 @@ namespace Nif
             throw std::runtime_error(std::format("Failed to read typed ({}) dynamic buffer of {} instances: {}",
                 typeid(T).name(), numInstances, std::generic_category().message(errno)));
         if constexpr (Misc::IS_BIG_ENDIAN)
-            for (std::size_t i = 0; i < numInstances; i++)
-                Misc::swapEndiannessInplace(dest[i]);
+            Misc::swapEndiannessBulkInplace(dest, numInstances);
     }
 
     template <std::size_t numInstances, typename T>
@@ -69,8 +68,7 @@ namespace Nif
             throw std::runtime_error(std::format("Failed to read typed ({}) dynamic buffer of {} instances: {}",
                 typeid(T).name(), numInstances, std::generic_category().message(errno)));
         if constexpr (Misc::IS_BIG_ENDIAN)
-            for (std::size_t i = 0; i < numInstances; i++)
-                Misc::swapEndiannessInplace(dest[i]);
+            Misc::swapEndiannessBulkInplace(dest, numInstances);
     }
 
     class NIFStream;
