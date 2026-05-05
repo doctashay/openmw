@@ -1,4 +1,4 @@
-centroid varying vec4 passColor;
+varying vec4 passColor;
 
 uniform int colorMode;
 

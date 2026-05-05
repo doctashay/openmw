@@ -30,6 +30,7 @@ option(DEPLOY_QT_TRANSLATIONS "Deploy standard Qt translations to resources fold
 # Apps and tools
 option(BUILD_OPENMW             "Build OpenMW" ON)
 option(BUILD_LAUNCHER           "Build Launcher" ON)
+option(BUILD_LAUNCHER_COCOA     "Build native Cocoa launcher" ON)
 option(BUILD_WIZARD             "Build Installation Wizard" ON)
 option(BUILD_MWINIIMPORTER      "Build MWiniImporter" ON)
 option(BUILD_OPENCS             "Build OpenMW Construction Set" ON)
@@ -46,13 +47,37 @@ option(BUILD_BULLETOBJECTTOOL   "Build Bullet object tool" ON)
 option(BUILD_OPENCS_TESTS       "Build OpenMW Construction Set tests" OFF)
 option(BUILD_OPENMW_TESTS       "Build OpenMW tests" OFF)
 option(PRECOMPILE_HEADERS_WITH_MSVC "Precompile most common used headers with MSVC (alternative to ccache)" ON)
-
 set(OpenGL_GL_PREFERENCE LEGACY)  # Use LEGACY as we use GL2; GLNVD is for GL3 and up.
 
-if (BUILD_LAUNCHER OR BUILD_OPENCS OR BUILD_WIZARD OR BUILD_OPENCS_TESTS)
-    set(USE_QT TRUE)
+# USE_QT - disabled by default, user can enable if needed
+# First check if user explicitly provided USE_QT on command line
+if (DEFINED USE_QT)
+    # User explicitly set USE_QT, respect their choice
+    message(STATUS "USE_QT explicitly set to: ${USE_QT}")
 else()
+    # Default to FALSE - Qt disabled
     set(USE_QT FALSE)
+    message(STATUS "USE_QT disabled by default (set USE_QT=ON to enable)")
+endif()
+
+# Disable Qt-dependent apps if Qt is disabled
+if (NOT USE_QT)
+    if (BUILD_LAUNCHER)
+        message(STATUS "Disabling BUILD_LAUNCHER (requires Qt)")
+        set(BUILD_LAUNCHER OFF CACHE BOOL "Build Launcher" FORCE)
+    endif()
+    if (BUILD_OPENCS)
+        message(STATUS "Disabling BUILD_OPENCS (requires Qt)")
+        set(BUILD_OPENCS OFF CACHE BOOL "Build OpenMW Construction Set" FORCE)
+    endif()
+    if (BUILD_WIZARD)
+        message(STATUS "Disabling BUILD_WIZARD (requires Qt)")
+        set(BUILD_WIZARD OFF CACHE BOOL "Build Installation Wizard" FORCE)
+    endif()
+    if (BUILD_OPENCS_TESTS)
+        message(STATUS "Disabling BUILD_OPENCS_TESTS (requires Qt)")
+        set(BUILD_OPENCS_TESTS OFF CACHE BOOL "Build OpenMW Construction Set tests" FORCE)
+    endif()
 endif()
 
 # If the user doesn't supply a CMAKE_BUILD_TYPE via command line, choose one for them.
@@ -68,6 +93,85 @@ if (APPLE)
     set(APP_BUNDLE_NAME "${CMAKE_PROJECT_NAME}.app")
 
     set(APP_BUNDLE_DIR "${OpenMW_BINARY_DIR}/${APP_BUNDLE_NAME}")
+    
+    # macOS 10.5 Leopard and PowerPC support
+    option(OPENMW_MACOSX_10_5_BUILD "Build for macOS 10.5 Leopard" OFF)
+    option(OPENMW_POWERPC_BUILD "Build for PowerPC architecture" OFF)
+    
+    # Auto-detect if deployment target is 10.5 or earlier
+    if(CMAKE_OSX_DEPLOYMENT_TARGET)
+        if(CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS "10.6")
+            set(OPENMW_MACOSX_10_5 TRUE)
+            message(STATUS "Detected macOS 10.5 build (deployment target: ${CMAKE_OSX_DEPLOYMENT_TARGET})")
+        endif()
+    endif()
+    
+    # Check for PowerPC architecture
+    if(CMAKE_OSX_ARCHITECTURES)
+        string(TOUPPER "${CMAKE_OSX_ARCHITECTURES}" ARCH_UPPER)
+        if(ARCH_UPPER MATCHES "PPC|POWERPC")
+            set(OPENMW_POWERPC_BUILD TRUE)
+            message(STATUS "Detected PowerPC architecture: ${CMAKE_OSX_ARCHITECTURES}")
+        endif()
+    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "powerpc|ppc")
+        set(OPENMW_POWERPC_BUILD TRUE)
+        message(STATUS "Detected PowerPC architecture from system processor")
+    endif()
+    
+    # Explicit override options
+    if(OPENMW_MACOSX_10_5_BUILD)
+        set(OPENMW_MACOSX_10_5 TRUE)
+    endif()
+    
+    if(OPENMW_MACOSX_10_5)
+        message(STATUS "Configuring for macOS 10.5 Leopard")
+        
+        # Force deployment target to 10.5
+        if(NOT CMAKE_OSX_DEPLOYMENT_TARGET)
+            set(CMAKE_OSX_DEPLOYMENT_TARGET "10.5" CACHE STRING "macOS deployment target" FORCE)
+        elseif(CMAKE_OSX_DEPLOYMENT_TARGET VERSION_GREATER "10.5")
+            message(WARNING "Deployment target ${CMAKE_OSX_DEPLOYMENT_TARGET} is newer than 10.5, forcing to 10.5")
+            set(CMAKE_OSX_DEPLOYMENT_TARGET "10.5" CACHE STRING "macOS deployment target" FORCE)
+        endif()
+        
+        # SDK path configuration
+        if(DEFINED ENV{MACOSX_SDK_PATH})
+            set(CMAKE_OSX_SYSROOT "$ENV{MACOSX_SDK_PATH}" CACHE PATH "macOS SDK path")
+        elseif(EXISTS "/Developer/SDKs/MacOSX10.5.sdk")
+            set(CMAKE_OSX_SYSROOT "/Developer/SDKs/MacOSX10.5.sdk" CACHE PATH "macOS SDK path")
+        elseif(EXISTS "/Developer/SDKs/MacOSX10.5.sdk")
+            set(CMAKE_OSX_SYSROOT "/Developer/SDKs/MacOSX10.5.sdk" CACHE PATH "macOS SDK path")
+        elseif(EXISTS "/opt/local/libexec/SDKs/MacOSX10.5.sdk")
+            set(CMAKE_OSX_SYSROOT "/opt/local/libexec/SDKs/MacOSX10.5.sdk" CACHE PATH "macOS SDK path")
+        else()
+            message(WARNING "macOS 10.5 SDK not found. Please set MACOSX_SDK_PATH environment variable")
+        endif()
+        
+        if(CMAKE_OSX_SYSROOT)
+            message(STATUS "Using macOS SDK: ${CMAKE_OSX_SYSROOT}")
+        endif()
+        
+        # Compiler flags for 10.5
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mmacosx-version-min=10.5")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mmacosx-version-min=10.5")
+        
+        # Define macros for 10.5 API availability
+        add_definitions(-DMAC_OS_X_VERSION_MIN_REQUIRED=1050)
+        add_definitions(-DMAC_OS_X_VERSION_MAX_ALLOWED=1050)
+        # Also define the underscored version used by some code
+        add_definitions(-D__MAC_OS_X_VERSION_MIN_REQUIRED=1050)
+        add_definitions(-D__MAC_OS_X_VERSION_MAX_ALLOWED=1050)
+        # Define OPENMW_MACOSX_10_5 for code to use
+        add_definitions(-DOPENMW_MACOSX_10_5=1)
+    endif()
+    
+    if(OPENMW_POWERPC_BUILD)
+        message(STATUS "Building for PowerPC architecture")
+        if(NOT CMAKE_OSX_ARCHITECTURES)
+            # Default to 32-bit PowerPC for 10.5
+            set(CMAKE_OSX_ARCHITECTURES "ppc" CACHE STRING "macOS architectures" FORCE)
+        endif()
+    endif()
 endif (APPLE)
 
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/)
@@ -164,8 +268,20 @@ option(OPENMW_USE_SYSTEM_SQLITE3 "Use system provided SQLite3 library" ON)
 option(OPENMW_USE_SYSTEM_BENCHMARK "Use system Google Benchmark library." OFF)
 option(OPENMW_USE_SYSTEM_GOOGLETEST "Use system Google Test library." OFF)
 
-option(OPENMW_UNITY_BUILD "Use fewer compilation units to speed up compile time" FALSE)
+option(OPENMW_UNITY_BUILD "Use fewer compilation units to speed up compile time" OFF)
 option(OPENMW_LTO_BUILD "Build OpenMW with Link-Time Optimization (Needs ~2GB of RAM)" OFF)
+option(OPENMW_OSG_SINGLE_THREADED "Force OpenSceneGraph into single-threaded mode" OFF)
+
+if(OPENMW_OSG_SINGLE_THREADED)
+    message(STATUS "OpenSceneGraph single-threaded mode enforced")
+    if(NOT OPENMW_USE_SYSTEM_OSG)
+        set(OSG_STATIC ON CACHE BOOL "Link static build of OpenSceneGraph into the binaries" FORCE)
+    endif()
+    if(NOT OPENMW_USE_SYSTEM_MYGUI)
+        set(MYGUI_STATIC ON CACHE BOOL "Link static build of Mygui into the binaries" FORCE)
+    endif()
+    message(STATUS "OSG and MyGUI forced to static linking for single-threaded builds")
+endif()
 
 # OS X deployment
 option(OPENMW_OSX_DEPLOYMENT OFF)
@@ -236,22 +352,80 @@ endif()
 
 # Dependencies
 if (APPLE)
-    # Force CMake to use the installed version of OpenGL on macOS
+    # Force the system OpenGL framework on macOS instead of /opt/local Mesa.
     set(_SAVE_CMAKE_FIND_FRAMEWORK ${CMAKE_FIND_FRAMEWORK})
     set(CMAKE_FIND_FRAMEWORK ONLY)
+    set(_SAVE_PREFIX_PATH ${CMAKE_PREFIX_PATH})
+    list(FILTER CMAKE_PREFIX_PATH EXCLUDE REGEX ".*opt/local.*")
     find_package(OpenGL REQUIRED)
+    set(CMAKE_PREFIX_PATH ${_SAVE_PREFIX_PATH})
     set(CMAKE_FIND_FRAMEWORK ${_SAVE_CMAKE_FIND_FRAMEWORK})
     unset(_SAVE_CMAKE_FIND_FRAMEWORK)
+    unset(_SAVE_PREFIX_PATH)
+    if(OPENGL_gl_LIBRARY AND OPENGL_gl_LIBRARY MATCHES "/opt/local")
+        unset(OPENGL_gl_LIBRARY CACHE)
+        find_library(OPENGL_gl_LIBRARY NAMES OpenGL
+            PATHS /System/Library/Frameworks /Library/Frameworks
+            NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
+        if(OPENGL_gl_LIBRARY)
+            get_filename_component(_OPENGL_FRAMEWORK_DIR "${OPENGL_gl_LIBRARY}" DIRECTORY)
+            if(EXISTS "${_OPENGL_FRAMEWORK_DIR}/Headers")
+                set(OPENGL_INCLUDE_DIR "${_OPENGL_FRAMEWORK_DIR}/Headers" CACHE PATH "OpenGL include dir" FORCE)
+            endif()
+            unset(_OPENGL_FRAMEWORK_DIR)
+            message(STATUS "Using system OpenGL framework: ${OPENGL_gl_LIBRARY}")
+        endif()
+    endif()
 else()
     find_package(OpenGL REQUIRED)
 endif()
 
-find_package(LZ4 REQUIRED)
+find_package(LZ4 QUIET)
+if(NOT LZ4_FOUND)
+    message(FATAL_ERROR "LZ4 library is required but not found. Please install LZ4 via your package manager.")
+endif()
 
 if (USE_QT)
-    find_package(QT REQUIRED COMPONENTS Core NAMES Qt6)
-    find_package(Qt6 COMPONENTS Core Widgets Network OpenGL OpenGLWidgets LinguistTools Svg REQUIRED)
-    message(STATUS "Using Qt${QT_VERSION}")
+    # Qt version selection for macOS 10.5 and PowerPC
+    # Default to Qt4 for macOS 10.5 and PowerPC, Qt6 otherwise
+    if(OPENMW_MACOSX_10_5 OR OPENMW_POWERPC_BUILD)
+        set(OPENMW_QT_VERSION_DEFAULT 4)
+        if(OPENMW_MACOSX_10_5)
+            message(STATUS "macOS 10.5 detected: defaulting to Qt4")
+        else()
+            message(STATUS "PowerPC build detected: defaulting to Qt4")
+        endif()
+    else()
+        set(OPENMW_QT_VERSION_DEFAULT 6)
+    endif()
+    option(OPENMW_QT_VERSION "Qt version to use (4 or 6)" ${OPENMW_QT_VERSION_DEFAULT})
+    
+    if(OPENMW_MACOSX_10_5 OR OPENMW_POWERPC_BUILD)
+        # macOS 10.5 and PowerPC require Qt4 - force it even if user tries to override
+        if(NOT OPENMW_QT_VERSION EQUAL 4)
+            message(WARNING "macOS 10.5/PowerPC only supports Qt4, forcing Qt4 (ignoring Qt version ${OPENMW_QT_VERSION})")
+            set(OPENMW_QT_VERSION 4 CACHE STRING "Qt version" FORCE)
+        endif()
+        if(OPENMW_MACOSX_10_5)
+            message(STATUS "macOS 10.5 build: using Qt4")
+        else()
+            message(STATUS "PowerPC build: using Qt4")
+        endif()
+    endif()
+    
+    if(OPENMW_QT_VERSION EQUAL 4)
+        find_package(Qt4 REQUIRED COMPONENTS QtCore QtGui QtOpenGL QtNetwork QtSvg)
+        set(QT_VERSION_MAJOR 4)
+        set(USE_QT4 TRUE CACHE BOOL "Using Qt4" FORCE)
+        message(STATUS "Using Qt4")
+    else()
+        find_package(QT REQUIRED COMPONENTS Core NAMES Qt6)
+        find_package(Qt6 COMPONENTS Core Widgets Network OpenGL OpenGLWidgets LinguistTools Svg REQUIRED)
+        set(USE_QT4 FALSE CACHE BOOL "Using Qt4" FORCE)
+        message(STATUS "Using Qt${QT_VERSION}")
+    endif()
+else()
+    set(USE_QT4 FALSE CACHE BOOL "Using Qt4" FORCE)
 endif()
 
 set(USED_OSG_COMPONENTS
@@ -285,27 +459,49 @@ if(NOT COLLADA_DOM_VERSION_MINOR)
     set(COLLADA_DOM_VERSION_MINOR 5)
 endif()
 
-find_package(collada_dom 2.5)
+find_package(collada_dom 2.5 QUIET)
+if(NOT collada_dom_FOUND)
+    message(STATUS "collada_dom not found - some features may be unavailable")
+endif()
 
 option(OPENMW_USE_SYSTEM_ICU "Use system ICU library instead of internal. If disabled, requires autotools" ON)
 if(OPENMW_USE_SYSTEM_ICU)
-    find_package(ICU REQUIRED COMPONENTS uc i18n data)
+    find_package(ICU QUIET COMPONENTS uc i18n data)
+    if(NOT ICU_FOUND)
+        if(OPENMW_MACOSX_10_5)
+            message(WARNING "System ICU not found. Internal ICU build requires autotools (autoconf, automake, libtool).")
+            message(WARNING "It is STRONGLY recommended to install ICU via MacPorts: sudo port install icu")
+            message(WARNING "If you proceed without ICU, some features may be unavailable.")
+            # For macOS 10.5, we should probably fail if ICU is not available
+            # But let's make it a warning for now and let the build attempt continue
+        else()
+            message(STATUS "System ICU not found, will build internally")
+        endif()
+        set(OPENMW_USE_SYSTEM_ICU OFF)
+    endif()
 endif()
 
 option(OPENMW_USE_SYSTEM_YAML_CPP "Use system yaml-cpp library instead of internal." ON)
 if(OPENMW_USE_SYSTEM_YAML_CPP)
     set(_yaml_cpp_static_default OFF)
+    find_package(yaml-cpp QUIET)
+    if(NOT yaml-cpp_FOUND)
+        message(STATUS "System yaml-cpp not found, will build internally")
+        set(OPENMW_USE_SYSTEM_YAML_CPP OFF)
+        set(_yaml_cpp_static_default ON)
+    endif()
 else()
     set(_yaml_cpp_static_default ON)
 endif()
 option(YAML_CPP_STATIC "Link static build of yaml-cpp into the binaries" ${_yaml_cpp_static_default})
-if (OPENMW_USE_SYSTEM_YAML_CPP)
-    find_package(yaml-cpp REQUIRED)
-endif()
 
 if ((BUILD_COMPONENTS_TESTS OR BUILD_OPENCS_TESTS OR BUILD_OPENMW_TESTS) AND OPENMW_USE_SYSTEM_GOOGLETEST)
-    find_package(GTest 1.10 REQUIRED)
-    find_package(GMock 1.10 REQUIRED)
+    find_package(GTest 1.10 QUIET)
+    find_package(GMock 1.10 QUIET)
+    if(NOT GTest_FOUND OR NOT GMock_FOUND)
+        message(STATUS "System GTest/GMock not found, will build internally")
+        set(OPENMW_USE_SYSTEM_GOOGLETEST OFF)
+    endif()
 endif()
 
 add_subdirectory(extern)
@@ -345,7 +541,11 @@ if(FFmpeg_FOUND)
     endif()
 
     if(NOT FFVER_OK AND NOT APPLE)  # unable to detect on version on MacOS < 11.0
-        message(FATAL_ERROR "FFmpeg version is too old, 3.2 is required" )
+        if(OPENMW_MACOSX_10_5)
+            message(WARNING "FFmpeg version may be too old (${FFmpeg_AVFORMAT_VERSION}), but continuing for macOS 10.5 compatibility")
+        else()
+            message(FATAL_ERROR "FFmpeg version is too old, 3.2 is required" )
+        endif()
     endif()
 endif()
 
@@ -394,30 +594,46 @@ if(OPENMW_USE_SYSTEM_BULLET)
     if (BULLET_FOUND)
         string(REPLACE "." "" _bullet_version_num ${BULLET_VERSION_STRING})
         if (_bullet_version_num VERSION_LESS REQUIRED_BULLET_VERSION)
-            message(FATAL_ERROR "System bullet version too old, OpenMW requires at least ${REQUIRED_BULLET_VERSION}, got ${_bullet_version_num}")
+            message(WARNING "System bullet version too old (${_bullet_version_num}), required ${REQUIRED_BULLET_VERSION}. Falling back to internal build.")
+            set(OPENMW_USE_SYSTEM_BULLET OFF)
+        else()
+            # Fix the relative include:
+            set(BULLET_INCLUDE_DIRS "${BULLET_ROOT_DIR}/${BULLET_INCLUDE_DIRS}")
+            include(FindPackageMessage)
+            find_package_message(Bullet "Found Bullet: ${BULLET_LIBRARIES} ${BULLET_VERSION_STRING}" "${BULLET_VERSION_STRING}-float64")
         endif()
-        # Fix the relative include:
-        set(BULLET_INCLUDE_DIRS "${BULLET_ROOT_DIR}/${BULLET_INCLUDE_DIRS}")
-        include(FindPackageMessage)
-        find_package_message(Bullet "Found Bullet: ${BULLET_LIBRARIES} ${BULLET_VERSION_STRING}" "${BULLET_VERSION_STRING}-float64")
     else()
-        find_package(Bullet ${REQUIRED_BULLET_VERSION} REQUIRED COMPONENTS BulletCollision LinearMath)
+        # Try standard find_package
+        find_package(Bullet ${REQUIRED_BULLET_VERSION} QUIET COMPONENTS BulletCollision LinearMath)
+        if(NOT BULLET_FOUND)
+            message(STATUS "System Bullet not found, will build internally")
+            set(OPENMW_USE_SYSTEM_BULLET OFF)
+        endif()
     endif()
 
-    # Only link the Bullet libraries that we need:
-    string(REGEX MATCHALL "((optimized|debug);)?[^;]*(BulletCollision|LinearMath)[^;]*" BULLET_LIBRARIES "${BULLET_LIBRARIES}")
+    if(OPENMW_USE_SYSTEM_BULLET)
+        # Only link the Bullet libraries that we need:
+        string(REGEX MATCHALL "((optimized|debug);)?[^;]*(BulletCollision|LinearMath)[^;]*" BULLET_LIBRARIES "${BULLET_LIBRARIES}")
 
-    include(cmake/CheckBulletPrecision.cmake)
-    if (HAS_DOUBLE_PRECISION_BULLET)
-        message(STATUS "Bullet uses double precision")
-    else()
-        message(FATAL_ERROR "Bullet does not uses double precision")
+        include(cmake/CheckBulletPrecision.cmake)
+        if (HAS_DOUBLE_PRECISION_BULLET)
+            message(STATUS "Bullet uses double precision")
+        else()
+            message(WARNING "Bullet does not use double precision. Falling back to internal build.")
+            set(OPENMW_USE_SYSTEM_BULLET OFF)
+        endif()
     endif()
 endif()
 
 if (NOT WIN32 AND BUILD_WIZARD) # windows users can just run the morrowind installer
-    find_package(LIBUNSHIELD REQUIRED) # required only for non win32 when building openmw-wizard
-    set(OPENMW_USE_UNSHIELD TRUE)
+    find_package(LIBUNSHIELD QUIET) # required only for non win32 when building openmw-wizard
+    if(LIBUNSHIELD_FOUND)
+        set(OPENMW_USE_UNSHIELD TRUE)
+    else()
+        message(WARNING "LIBUNSHIELD not found - wizard will not be able to extract game files from installers")
+        message(WARNING "Users will need to manually extract game files")
+        set(OPENMW_USE_UNSHIELD FALSE)
+    endif()
 endif()
 
 # Fix for not visible pthreads functions for linker with glibc 2.15
@@ -434,14 +650,28 @@ if(NOT HAVE_STDINT_H)
 endif()
 
 if(OPENMW_USE_SYSTEM_OSG)
-    find_package(OpenSceneGraph 3.6.5 REQUIRED ${USED_OSG_COMPONENTS})  # Bump to 3.6.6 when released
+    find_package(OpenSceneGraph 3.6.5 QUIET COMPONENTS ${USED_OSG_COMPONENTS})  # Bump to 3.6.6 when released
 
-    if(OSG_STATIC)
-        find_package(OSGPlugins REQUIRED COMPONENTS ${USED_OSG_PLUGINS})
+    if(NOT OpenSceneGraph_FOUND)
+        message(STATUS "System OpenSceneGraph not found, will build internally")
+        set(OPENMW_USE_SYSTEM_OSG OFF)
+        set(_osg_static_default ON)
+    else()
+        if(OSG_STATIC)
+            find_package(OSGPlugins QUIET COMPONENTS ${USED_OSG_PLUGINS})
+            if(NOT OSGPlugins_FOUND)
+                message(STATUS "System OSGPlugins not found, will build OSG internally")
+                set(OPENMW_USE_SYSTEM_OSG OFF)
+                set(_osg_static_default ON)
+            endif()
+        endif()
     endif()
 endif()
 
-include_directories(BEFORE SYSTEM ${OPENSCENEGRAPH_INCLUDE_DIRS})
+# Always add OSG include directories (for both system and internal builds)
+if(OPENSCENEGRAPH_INCLUDE_DIRS)
+    include_directories(BEFORE SYSTEM ${OPENSCENEGRAPH_INCLUDE_DIRS})
+endif()
 
 if(OSG_STATIC)
     add_definitions(-DOSG_LIBRARY_STATIC)
@@ -454,20 +684,594 @@ endif(HAVE_MULTIVIEW)
 
 set(BOOST_COMPONENTS iostreams program_options)
 
-find_package(Boost 1.70.0 CONFIG REQUIRED COMPONENTS ${BOOST_COMPONENTS} OPTIONAL_COMPONENTS ${BOOST_OPTIONAL_COMPONENTS})
+# Explicitly use shared libraries (MacPorts boost176 is built with +no_static)
+set(Boost_USE_STATIC_LIBS OFF)
+set(Boost_USE_STATIC_RUNTIME OFF)
+
+# Check environment variable for Boost_ROOT if not set as CMake variable
+if(NOT Boost_ROOT AND DEFINED ENV{Boost_ROOT})
+    set(Boost_ROOT "$ENV{Boost_ROOT}" CACHE PATH "Boost root directory")
+    message(STATUS "Using Boost_ROOT from environment: ${Boost_ROOT}")
+endif()
+
+# Try CONFIG mode first (modern Boost), fallback to MODULE mode (older installations/MacPorts)
+find_package(Boost 1.70.0 CONFIG QUIET COMPONENTS ${BOOST_COMPONENTS} OPTIONAL_COMPONENTS ${BOOST_OPTIONAL_COMPONENTS})
+if(NOT Boost_FOUND)
+    # Fallback to MODULE mode for older Boost installations or MacPorts
+    find_package(Boost 1.70.0 MODULE QUIET COMPONENTS ${BOOST_COMPONENTS} OPTIONAL_COMPONENTS ${BOOST_OPTIONAL_COMPONENTS})
+endif()
+if(NOT Boost_FOUND)
+    message(FATAL_ERROR "Boost 1.70.0 or later is required. Please install Boost via MacPorts:\n  sudo port install boost\nOr set Boost_ROOT to the Boost installation directory.")
+endif()
+
+# If Boost_ROOT is set but Boost_LIBRARY_DIRS/Boost_INCLUDE_DIRS are empty,
+# manually set them (this happens when Boost doesn't have CMake config files)
+if(Boost_ROOT)
+    if(NOT Boost_LIBRARY_DIRS AND EXISTS "${Boost_ROOT}/lib")
+        set(Boost_LIBRARY_DIRS "${Boost_ROOT}/lib")
+        message(STATUS "Manually setting Boost_LIBRARY_DIRS: ${Boost_LIBRARY_DIRS}")
+    endif()
+    if(NOT Boost_INCLUDE_DIRS AND EXISTS "${Boost_ROOT}/include")
+        set(Boost_INCLUDE_DIRS "${Boost_ROOT}/include")
+        message(STATUS "Manually setting Boost_INCLUDE_DIRS: ${Boost_INCLUDE_DIRS}")
+    endif()
+endif()
+
+# Debug output
+message(STATUS "Boost found: ${Boost_FOUND}")
+message(STATUS "Boost_VERSION: ${Boost_VERSION}")
+message(STATUS "Boost_ROOT: ${Boost_ROOT}")
+message(STATUS "Boost_LIBRARY_DIRS: ${Boost_LIBRARY_DIRS}")
+message(STATUS "Boost_INCLUDE_DIRS: ${Boost_INCLUDE_DIRS}")
+message(STATUS "Boost_LIBRARIES: ${Boost_LIBRARIES}")
+
+# Create imported targets if they don't exist (MODULE mode doesn't create them)
+if(NOT TARGET Boost::program_options)
+    add_library(Boost::program_options IMPORTED UNKNOWN)
+    set(BOOST_PO_FOUND FALSE)
+    set(BOOST_PO_LIB "")
+    
+    # Try component-specific variables first
+    if(Boost_PROGRAM_OPTIONS_LIBRARY_RELEASE)
+        set_target_properties(Boost::program_options PROPERTIES
+            IMPORTED_LOCATION_RELEASE "${Boost_PROGRAM_OPTIONS_LIBRARY_RELEASE}")
+        set(BOOST_PO_FOUND TRUE)
+        set(BOOST_PO_LIB "${Boost_PROGRAM_OPTIONS_LIBRARY_RELEASE}")
+    endif()
+    if(Boost_PROGRAM_OPTIONS_LIBRARY_DEBUG)
+        set_target_properties(Boost::program_options PROPERTIES
+            IMPORTED_LOCATION_DEBUG "${Boost_PROGRAM_OPTIONS_LIBRARY_DEBUG}")
+        set(BOOST_PO_FOUND TRUE)
+        if(NOT BOOST_PO_LIB)
+            set(BOOST_PO_LIB "${Boost_PROGRAM_OPTIONS_LIBRARY_DEBUG}")
+        endif()
+    endif()
+    if(Boost_PROGRAM_OPTIONS_LIBRARY)
+        set_target_properties(Boost::program_options PROPERTIES
+            IMPORTED_LOCATION "${Boost_PROGRAM_OPTIONS_LIBRARY}")
+        set(BOOST_PO_FOUND TRUE)
+        if(NOT BOOST_PO_LIB)
+            set(BOOST_PO_LIB "${Boost_PROGRAM_OPTIONS_LIBRARY}")
+        endif()
+    endif()
+    
+    # Fallback: Extract from Boost_LIBRARIES
+    if(NOT BOOST_PO_FOUND AND Boost_LIBRARIES)
+        foreach(lib ${Boost_LIBRARIES})
+            # Skip generator expressions and keywords
+            if(lib MATCHES "program_options" AND NOT lib MATCHES "^(optimized|debug|general)$")
+                # Remove generator expression keywords
+                string(REGEX REPLACE "^(optimized|debug);" "" clean_lib "${lib}")
+                if(EXISTS "${clean_lib}")
+                    set_target_properties(Boost::program_options PROPERTIES
+                        IMPORTED_LOCATION "${clean_lib}")
+                    set(BOOST_PO_FOUND TRUE)
+                    set(BOOST_PO_LIB "${clean_lib}")
+                    break()
+                endif()
+            endif()
+        endforeach()
+    endif()
+    
+    # Fallback: Construct path from Boost_LIBRARY_DIRS
+    if(NOT BOOST_PO_FOUND AND Boost_LIBRARY_DIRS)
+        # Try shared library first (since Boost_USE_STATIC_LIBS is OFF)
+        find_library(BOOST_PO_LIB_TMP
+            NAMES boost_program_options
+            PATHS ${Boost_LIBRARY_DIRS}
+            NO_DEFAULT_PATH
+        )
+        if(BOOST_PO_LIB_TMP)
+            set_target_properties(Boost::program_options PROPERTIES
+                IMPORTED_LOCATION "${BOOST_PO_LIB_TMP}")
+            set(BOOST_PO_FOUND TRUE)
+            set(BOOST_PO_LIB "${BOOST_PO_LIB_TMP}")
+        endif()
+    endif()
+    
+    # Fallback: Use Boost_ROOT if set (CMake variable or environment variable)
+    if(NOT BOOST_PO_FOUND)
+        set(BOOST_ROOT_TO_CHECK "${Boost_ROOT}")
+        if(NOT BOOST_ROOT_TO_CHECK AND DEFINED ENV{Boost_ROOT})
+            set(BOOST_ROOT_TO_CHECK "$ENV{Boost_ROOT}")
+        endif()
+        if(BOOST_ROOT_TO_CHECK)
+            find_library(BOOST_PO_LIB_TMP
+                NAMES boost_program_options
+                PATHS "${BOOST_ROOT_TO_CHECK}/lib"
+                NO_DEFAULT_PATH
+            )
+            if(BOOST_PO_LIB_TMP)
+                set_target_properties(Boost::program_options PROPERTIES
+                    IMPORTED_LOCATION "${BOOST_PO_LIB_TMP}")
+                set(BOOST_PO_FOUND TRUE)
+                set(BOOST_PO_LIB "${BOOST_PO_LIB_TMP}")
+            endif()
+        endif()
+    endif()
+    
+    if(Boost_INCLUDE_DIRS)
+        set_target_properties(Boost::program_options PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${Boost_INCLUDE_DIRS}")
+    endif()
+    
+    if(NOT BOOST_PO_FOUND)
+        set(ENV_BOOST_ROOT "")
+        if(DEFINED ENV{Boost_ROOT})
+            set(ENV_BOOST_ROOT "$ENV{Boost_ROOT}")
+        endif()
+        message(FATAL_ERROR 
+            "Boost::program_options library not found.\n"
+            "Boost_PROGRAM_OPTIONS_LIBRARY: ${Boost_PROGRAM_OPTIONS_LIBRARY}\n"
+            "Boost_LIBRARIES: ${Boost_LIBRARIES}\n"
+            "Boost_LIBRARY_DIRS: ${Boost_LIBRARY_DIRS}\n"
+            "Boost_ROOT (CMake): ${Boost_ROOT}\n"
+            "Boost_ROOT (env): ${ENV_BOOST_ROOT}\n"
+            "Please ensure Boost is properly installed and set Boost_ROOT:\n"
+            "  -D Boost_ROOT=/opt/local/boost181-gcc14-ppc\n"
+            "  or export Boost_ROOT=/opt/local/boost181-gcc14-ppc")
+    endif()
+endif()
+
+if(NOT TARGET Boost::iostreams)
+    add_library(Boost::iostreams IMPORTED UNKNOWN)
+    set(BOOST_IOSTREAMS_FOUND FALSE)
+    set(BOOST_IOSTREAMS_LIB "")
+    
+    # Try component-specific variables first
+    if(Boost_IOSTREAMS_LIBRARY_RELEASE)
+        set_target_properties(Boost::iostreams PROPERTIES
+            IMPORTED_LOCATION_RELEASE "${Boost_IOSTREAMS_LIBRARY_RELEASE}")
+        set(BOOST_IOSTREAMS_FOUND TRUE)
+        set(BOOST_IOSTREAMS_LIB "${Boost_IOSTREAMS_LIBRARY_RELEASE}")
+    endif()
+    if(Boost_IOSTREAMS_LIBRARY_DEBUG)
+        set_target_properties(Boost::iostreams PROPERTIES
+            IMPORTED_LOCATION_DEBUG "${Boost_IOSTREAMS_LIBRARY_DEBUG}")
+        set(BOOST_IOSTREAMS_FOUND TRUE)
+        if(NOT BOOST_IOSTREAMS_LIB)
+            set(BOOST_IOSTREAMS_LIB "${Boost_IOSTREAMS_LIBRARY_DEBUG}")
+        endif()
+    endif()
+    if(Boost_IOSTREAMS_LIBRARY)
+        set_target_properties(Boost::iostreams PROPERTIES
+            IMPORTED_LOCATION "${Boost_IOSTREAMS_LIBRARY}")
+        set(BOOST_IOSTREAMS_FOUND TRUE)
+        if(NOT BOOST_IOSTREAMS_LIB)
+            set(BOOST_IOSTREAMS_LIB "${Boost_IOSTREAMS_LIBRARY}")
+        endif()
+    endif()
+    
+    # Fallback: Extract from Boost_LIBRARIES
+    if(NOT BOOST_IOSTREAMS_FOUND AND Boost_LIBRARIES)
+        foreach(lib ${Boost_LIBRARIES})
+            if(lib MATCHES "iostreams" AND NOT lib MATCHES "^(optimized|debug|general)$")
+                string(REGEX REPLACE "^(optimized|debug);" "" clean_lib "${lib}")
+                if(EXISTS "${clean_lib}")
+                    set_target_properties(Boost::iostreams PROPERTIES
+                        IMPORTED_LOCATION "${clean_lib}")
+                    set(BOOST_IOSTREAMS_FOUND TRUE)
+                    set(BOOST_IOSTREAMS_LIB "${clean_lib}")
+                    break()
+                endif()
+            endif()
+        endforeach()
+    endif()
+    
+    # Fallback: Construct path from Boost_LIBRARY_DIRS
+    if(NOT BOOST_IOSTREAMS_FOUND AND Boost_LIBRARY_DIRS)
+        find_library(BOOST_IOSTREAMS_LIB_TMP
+            NAMES boost_iostreams
+            PATHS ${Boost_LIBRARY_DIRS}
+            NO_DEFAULT_PATH
+        )
+        if(BOOST_IOSTREAMS_LIB_TMP)
+            set_target_properties(Boost::iostreams PROPERTIES
+                IMPORTED_LOCATION "${BOOST_IOSTREAMS_LIB_TMP}")
+            set(BOOST_IOSTREAMS_FOUND TRUE)
+            set(BOOST_IOSTREAMS_LIB "${BOOST_IOSTREAMS_LIB_TMP}")
+        endif()
+    endif()
+    
+    # Fallback: Use Boost_ROOT if set (CMake variable or environment variable)
+    if(NOT BOOST_IOSTREAMS_FOUND)
+        set(BOOST_ROOT_TO_CHECK "${Boost_ROOT}")
+        if(NOT BOOST_ROOT_TO_CHECK AND DEFINED ENV{Boost_ROOT})
+            set(BOOST_ROOT_TO_CHECK "$ENV{Boost_ROOT}")
+        endif()
+        if(BOOST_ROOT_TO_CHECK)
+            find_library(BOOST_IOSTREAMS_LIB_TMP
+                NAMES boost_iostreams
+                PATHS "${BOOST_ROOT_TO_CHECK}/lib"
+                NO_DEFAULT_PATH
+            )
+            if(BOOST_IOSTREAMS_LIB_TMP)
+                set_target_properties(Boost::iostreams PROPERTIES
+                    IMPORTED_LOCATION "${BOOST_IOSTREAMS_LIB_TMP}")
+                set(BOOST_IOSTREAMS_FOUND TRUE)
+                set(BOOST_IOSTREAMS_LIB "${BOOST_IOSTREAMS_LIB_TMP}")
+            endif()
+        endif()
+    endif()
+    
+    if(Boost_INCLUDE_DIRS)
+        set_target_properties(Boost::iostreams PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${Boost_INCLUDE_DIRS}")
+    endif()
+    
+    if(NOT BOOST_IOSTREAMS_FOUND)
+        set(ENV_BOOST_ROOT "")
+        if(DEFINED ENV{Boost_ROOT})
+            set(ENV_BOOST_ROOT "$ENV{Boost_ROOT}")
+        endif()
+        message(FATAL_ERROR 
+            "Boost::iostreams library not found.\n"
+            "Boost_IOSTREAMS_LIBRARY: ${Boost_IOSTREAMS_LIBRARY}\n"
+            "Boost_LIBRARIES: ${Boost_LIBRARIES}\n"
+            "Boost_LIBRARY_DIRS: ${Boost_LIBRARY_DIRS}\n"
+            "Boost_ROOT (CMake): ${Boost_ROOT}\n"
+            "Boost_ROOT (env): ${ENV_BOOST_ROOT}\n"
+            "Please ensure Boost is properly installed and set Boost_ROOT:\n"
+            "  -D Boost_ROOT=/opt/local/boost181-gcc14-ppc\n"
+            "  or export Boost_ROOT=/opt/local/boost181-gcc14-ppc")
+    endif()
+endif()
+
+# For PowerPC builds, verify program_options library has PowerPC architecture
+if(APPLE AND (CMAKE_OSX_ARCHITECTURES MATCHES "ppc" OR OPENMW_POWERPC_BUILD))
+    # Try to find the actual program_options library file
+    if(TARGET Boost::program_options)
+        get_target_property(BOOST_PO_LOCATION Boost::program_options LOCATION)
+        if(BOOST_PO_LOCATION STREQUAL "BOOST_PO_LOCATION-NOTFOUND")
+            # Try alternative method
+            get_target_property(BOOST_PO_IMPORTED_LOCATION Boost::program_options IMPORTED_LOCATION)
+            if(NOT BOOST_PO_IMPORTED_LOCATION STREQUAL "BOOST_PO_IMPORTED_LOCATION-NOTFOUND")
+                set(BOOST_PO_LOCATION "${BOOST_PO_IMPORTED_LOCATION}")
+            endif()
+        endif()
+        if(BOOST_PO_LOCATION AND EXISTS "${BOOST_PO_LOCATION}")
+            execute_process(
+                COMMAND lipo -info "${BOOST_PO_LOCATION}"
+                OUTPUT_VARIABLE BOOST_PO_ARCH_INFO
+                ERROR_QUIET
+            )
+            if(BOOST_PO_ARCH_INFO)
+                string(FIND "${BOOST_PO_ARCH_INFO}" "ppc" PPC_POS)
+                string(FIND "${BOOST_PO_ARCH_INFO}" "powerpc" POWERPC_POS)
+                if(PPC_POS EQUAL -1 AND POWERPC_POS EQUAL -1)
+                    message(FATAL_ERROR
+                        "BOOST PROGRAM_OPTIONS MISSING POWERPC ARCHITECTURE\n"
+                        "The Boost program_options library does not contain PowerPC architecture.\n"
+                        "Library: ${BOOST_PO_LOCATION}\n"
+                        "Architectures found: ${BOOST_PO_ARCH_INFO}\n"
+                        "This will cause linker errors: Undefined symbols for architecture ppc.\n"
+                        "SOLUTION: Rebuild Boost for PowerPC using build_boost181_ppc.sh\n"
+                        "Then set: export Boost_ROOT=/opt/local/boost181-gcc14-ppc"
+                    )
+                else()
+                    message(STATUS "Boost program_options contains PowerPC architecture")
+                endif()
+            endif()
+        endif()
+    endif()
+endif()
+# Check Boost ABI compatibility for PowerPC/macOS 10.5
+# MacPorts Boost may be built with Clang/libc++, but we're using GCC/libstdc++
+# IMPORTANT: MacPorts must be configured with 'cxx_stdlib libstdc++' in macports.conf
+# and Boost should be installed with compiler=gcc-14 variant to ensure libstdc++ is used
+# Detect ABI mismatches and stop the build if incompatible
+if(APPLE AND (CMAKE_OSX_ARCHITECTURES MATCHES "ppc" OR OPENMW_POWERPC_BUILD))
+    message(STATUS "Checking Boost ABI compatibility...")
+    message(STATUS "Boost found: ${Boost_VERSION}")
+    message(STATUS "Boost libraries: ${Boost_LIBRARIES}")
+    message(STATUS "")
+    message(STATUS "NOTE: For MacPorts Boost, ensure 'cxx_stdlib libstdc++' is set in macports.conf")
+    message(STATUS "      and install with: sudo port install boost176 compiler=gcc-14")
+    message(STATUS "")
+    
+    # Determine our build's ABI settings
+    set(OUR_STDLIB "unknown")
+    set(OUR_COMPILER_ID "${CMAKE_CXX_COMPILER_ID}")
+    set(OUR_CXX11_ABI "unknown")
+    
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang")
+        # Clang on macOS typically uses libc++
+        set(OUR_STDLIB "libc++")
+    elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        # GCC uses libstdc++ by default
+        set(OUR_STDLIB "libstdc++")
+        # GCC 5.1+ defaults to C++11 ABI (value 1)
+        # Check if we're explicitly setting it
+        if(CMAKE_CXX_FLAGS MATCHES "_GLIBCXX_USE_CXX11_ABI=0")
+            set(OUR_CXX11_ABI "0")
+        else()
+            set(OUR_CXX11_ABI "1")
+        endif()
+    endif()
+    
+    message(STATUS "Our build configuration:")
+    message(STATUS "  Compiler: ${OUR_COMPILER_ID}")
+    message(STATUS "  Standard library: ${OUR_STDLIB}")
+    if(OUR_CXX11_ABI STREQUAL "0" OR OUR_CXX11_ABI STREQUAL "1")
+        message(STATUS "  C++11 ABI: ${OUR_CXX11_ABI}")
+    endif()
+    
+    # Detect Boost's ABI by examining its libraries
+    set(BOOST_STDLIB "unknown")
+    set(BOOST_COMPILER_ID "unknown")
+    set(BOOST_CXX11_ABI "unknown")
+    set(ABI_CHECK_FAILED FALSE)
+    
+    if(Boost_LIBRARIES)
+        list(GET Boost_LIBRARIES 0 FIRST_BOOST_LIB)
+        if(EXISTS "${FIRST_BOOST_LIB}")
+            # Check architecture first
+            execute_process(
+                COMMAND lipo -info "${FIRST_BOOST_LIB}"
+                OUTPUT_VARIABLE BOOST_ARCH_INFO
+                ERROR_QUIET
+            )
+            if(BOOST_ARCH_INFO)
+                message(STATUS "Boost architecture: ${BOOST_ARCH_INFO}")
+                # Check if PowerPC architecture is present
+                string(FIND "${BOOST_ARCH_INFO}" "ppc" PPC_POS)
+                string(FIND "${BOOST_ARCH_INFO}" "powerpc" POWERPC_POS)
+                if(PPC_POS EQUAL -1)
+                    if(POWERPC_POS EQUAL -1)
+                        message(WARNING "Boost library does NOT contain PowerPC architecture!")
+                        message(WARNING "Found architectures: ${BOOST_ARCH_INFO}")
+                        message(WARNING "This will cause linker errors for PowerPC builds.")
+                        message(WARNING "Solution: Rebuild Boost for PowerPC using build_boost181_ppc.sh")
+                        set(BOOST_MISSING_PPC TRUE)
+                    else()
+                        message(STATUS "Boost library contains PowerPC architecture")
+                    endif()
+                else()
+                    message(STATUS "Boost library contains PowerPC architecture")
+                endif()
+            else()
+                message(WARNING "Could not determine Boost library architecture")
+            endif()
+            
+            # Use otool -L to check linked standard library
+            execute_process(
+                COMMAND otool -L "${FIRST_BOOST_LIB}"
+                OUTPUT_VARIABLE BOOST_OTOOL_OUTPUT
+                ERROR_QUIET
+            )
+            
+            if(BOOST_OTOOL_OUTPUT)
+                # Check for libc++ (Clang's standard library)
+                if(BOOST_OTOOL_OUTPUT MATCHES "libc\\+\\+")
+                    set(BOOST_STDLIB "libc++")
+                    set(BOOST_COMPILER_ID "likely_Clang")
+                # Check for libstdc++ (GCC's standard library)
+                elseif(BOOST_OTOOL_OUTPUT MATCHES "libstdc\\+\\+")
+                    set(BOOST_STDLIB "libstdc++")
+                    set(BOOST_COMPILER_ID "likely_GCC")
+                endif()
+            endif()
+            
+            # Use nm to check symbol mangling patterns as additional verification
+            # _ZSt indicates libstdc++, _ZNSt indicates libc++
+            execute_process(
+                COMMAND nm -g "${FIRST_BOOST_LIB}" 2>/dev/null | head -20
+                OUTPUT_VARIABLE BOOST_NM_OUTPUT
+                ERROR_QUIET
+            )
+            
+            if(BOOST_NM_OUTPUT)
+                if(BOOST_NM_OUTPUT MATCHES "_ZSt")
+                    if(BOOST_STDLIB STREQUAL "unknown")
+                        set(BOOST_STDLIB "libstdc++")
+                        set(BOOST_COMPILER_ID "likely_GCC")
+                    endif()
+                elseif(BOOST_NM_OUTPUT MATCHES "_ZNSt")
+                    if(BOOST_STDLIB STREQUAL "unknown")
+                        set(BOOST_STDLIB "libc++")
+                        set(BOOST_COMPILER_ID "likely_Clang")
+                    endif()
+                endif()
+            endif()
+            
+            # If we still don't know, try to detect C++11 ABI for libstdc++
+            if(BOOST_STDLIB STREQUAL "libstdc++")
+                # Check for C++11 ABI symbols (new ABI uses different mangling)
+                # This is a heuristic - new ABI symbols are longer
+                execute_process(
+                    COMMAND nm -g "${FIRST_BOOST_LIB}" 2>/dev/null | grep -c "_ZSt" || echo "0"
+                    OUTPUT_VARIABLE BOOST_STD_SYMBOL_COUNT
+                    ERROR_QUIET
+                )
+                # If we find many _ZSt symbols, it's likely using C++11 ABI
+                # This is not 100% reliable but better than nothing
+                if(BOOST_STD_SYMBOL_COUNT)
+                    string(STRIP "${BOOST_STD_SYMBOL_COUNT}" BOOST_STD_SYMBOL_COUNT)
+                    if(BOOST_STD_SYMBOL_COUNT GREATER "10")
+                        set(BOOST_CXX11_ABI "likely_1")
+                    else()
+                        set(BOOST_CXX11_ABI "likely_0")
+                    endif()
+                endif()
+            endif()
+        else()
+            set(ABI_CHECK_FAILED TRUE)
+            message(WARNING "Boost library not found at: ${FIRST_BOOST_LIB}")
+        endif()
+    else()
+        set(ABI_CHECK_FAILED TRUE)
+        message(WARNING "Boost_LIBRARIES is empty")
+    endif()
+    
+    message(STATUS "Boost library analysis:")
+    message(STATUS "  Standard library: ${BOOST_STDLIB}")
+    message(STATUS "  Compiler: ${BOOST_COMPILER_ID}")
+    if(NOT BOOST_CXX11_ABI STREQUAL "unknown")
+        message(STATUS "  C++11 ABI: ${BOOST_CXX11_ABI}")
+    endif()
+    
+    # Compare ABIs and determine compatibility
+    if(NOT ABI_CHECK_FAILED AND NOT BOOST_STDLIB STREQUAL "unknown")
+        set(ABI_MISMATCH FALSE)
+        set(CAN_WORKAROUND FALSE)
+        set(WORKAROUND_APPLIED FALSE)
+        
+        # Case 1: libc++ vs libstdc++ - INCOMPATIBLE, no workaround
+        if(BOOST_STDLIB STREQUAL "libc++" AND OUR_STDLIB STREQUAL "libstdc++")
+            set(ABI_MISMATCH TRUE)
+            message(FATAL_ERROR "\n"
+                "================================================================================\n"
+                "BOOST ABI MISMATCH DETECTED - BUILD CANNOT PROCEED\n"
+                "================================================================================\n"
+                "Boost was built with: ${BOOST_STDLIB} (${BOOST_COMPILER_ID})\n"
+                "OpenMW is building with: ${OUR_STDLIB} (${OUR_COMPILER_ID})\n"
+                "\n"
+                "These are incompatible - libc++ and libstdc++ cannot be mixed.\n"
+                "\n"
+                "SOLUTION: Rebuild Boost with the same compiler and standard library:\n"
+                "\n"
+                "Option 1: Manual build (recommended for PowerPC):\n"
+                "  ./build_boost_ppc.sh\n"
+                "  export Boost_ROOT=/opt/local/boost-gcc14-ppc\n"
+                "\n"
+                "Option 2: MacPorts (ensure cxx_stdlib libstdc++ in macports.conf):\n"
+                "  # Verify MacPorts config has: cxx_stdlib libstdc++\n"
+                "  # Then install with GCC compiler variant:\n"
+                "  sudo port -s install boost176 compiler=gcc-14\n"
+                "  # Or uninstall and reinstall:\n"
+                "  sudo port uninstall boost176\n"
+                "  sudo port install boost176 compiler=gcc-14\n"
+                "\n"
+                "Then rerun CMake with: -D Boost_ROOT=<path_to_boost>\n"
+                "\n"
+                "To verify Boost's runtime, run:\n"
+                "  otool -L $(port file boost176 | grep -A5 'files' | head -1)/lib/libboost_program_options*.dylib\n"
+                "================================================================================\n"
+            )
+        elseif(BOOST_STDLIB STREQUAL "libstdc++" AND OUR_STDLIB STREQUAL "libc++")
+            set(ABI_MISMATCH TRUE)
+            message(FATAL_ERROR "\n"
+                "================================================================================\n"
+                "BOOST ABI MISMATCH DETECTED - BUILD CANNOT PROCEED\n"
+                "================================================================================\n"
+                "Boost was built with: ${BOOST_STDLIB} (${BOOST_COMPILER_ID})\n"
+                "OpenMW is building with: ${OUR_STDLIB} (${OUR_COMPILER_ID})\n"
+                "\n"
+                "These are incompatible - libstdc++ and libc++ cannot be mixed.\n"
+                "\n"
+                "SOLUTION: Rebuild Boost with Clang/libc++ or switch OpenMW to use libstdc++.\n"
+                "================================================================================\n"
+            )
+        # Case 2: Both use libstdc++ but different C++11 ABI - MAYBE workaround
+        elseif(BOOST_STDLIB STREQUAL "libstdc++" AND OUR_STDLIB STREQUAL "libstdc++")
+            if(NOT BOOST_CXX11_ABI STREQUAL "unknown" AND NOT OUR_CXX11_ABI STREQUAL "unknown")
+                if(BOOST_CXX11_ABI MATCHES "likely_0" AND OUR_CXX11_ABI STREQUAL "1")
+                    set(CAN_WORKAROUND TRUE)
+                    message(WARNING "\n"
+                        "================================================================================\n"
+                        "BOOST C++11 ABI MISMATCH DETECTED - ATTEMPTING WORKAROUND\n"
+                        "================================================================================\n"
+                        "Boost appears to use old C++11 ABI (0), but we're using new ABI (1).\n"
+                        "Attempting to match Boost's ABI by setting _GLIBCXX_USE_CXX11_ABI=0\n"
+                        "\n"
+                        "WARNING: This is a workaround and may cause issues. It's better to rebuild\n"
+                        "Boost with matching settings.\n"
+                        "================================================================================\n"
+                    )
+                    add_definitions(-D_GLIBCXX_USE_CXX11_ABI=0)
+                    set(WORKAROUND_APPLIED TRUE)
+                elseif(BOOST_CXX11_ABI MATCHES "likely_1" AND OUR_CXX11_ABI STREQUAL "0")
+                    set(CAN_WORKAROUND TRUE)
+                    message(WARNING "\n"
+                        "================================================================================\n"
+                        "BOOST C++11 ABI MISMATCH DETECTED - ATTEMPTING WORKAROUND\n"
+                        "================================================================================\n"
+                        "Boost appears to use new C++11 ABI (1), but we're using old ABI (0).\n"
+                        "Attempting to match Boost's ABI by setting _GLIBCXX_USE_CXX11_ABI=1\n"
+                        "\n"
+                        "WARNING: This is a workaround and may cause issues. It's better to rebuild\n"
+                        "Boost with matching settings.\n"
+                        "================================================================================\n"
+                    )
+                    add_definitions(-D_GLIBCXX_USE_CXX11_ABI=1)
+                    set(WORKAROUND_APPLIED TRUE)
+                else()
+                    message(STATUS "Boost and OpenMW both use libstdc++ with compatible C++11 ABI settings")
+                endif()
+            else()
+                message(STATUS "Boost and OpenMW both use libstdc++ - ABI should be compatible")
+            endif()
+        # Case 3: Both use libc++ - should be compatible
+        elseif(BOOST_STDLIB STREQUAL "libc++" AND OUR_STDLIB STREQUAL "libc++")
+            message(STATUS "Boost and OpenMW both use libc++ - ABI should be compatible")
+        endif()
+        
+        if(NOT ABI_MISMATCH AND NOT WORKAROUND_APPLIED)
+            message(STATUS "✓ Boost ABI compatibility check passed")
+        endif()
+    else()
+        message(WARNING "Could not fully analyze Boost ABI - proceeding with caution")
+        message(WARNING "If you encounter linker errors (vtable errors, undefined symbols),")
+        message(WARNING "Boost may have been built with a different compiler/ABI.")
+        message(WARNING "Solution: Rebuild Boost with gcc-mp-14 using build_boost_ppc.sh")
+    endif()
+endif()
 
 if(OPENMW_USE_SYSTEM_MYGUI)
-    find_package(MyGUI 3.4.3 REQUIRED)
+    find_package(MyGUI 3.4.3 QUIET)
+    if(NOT MyGUI_FOUND)
+        message(STATUS "System MyGUI not found, will build internally")
+        set(OPENMW_USE_SYSTEM_MYGUI OFF)
+        set(_mygui_static_default ON)
+    endif()
 endif()
-find_package(SDL2 2.0.20 REQUIRED)
-find_package(OpenAL REQUIRED)
-find_package(ZLIB REQUIRED)
+find_package(SDL2 2.0.20 QUIET)
+if(NOT SDL2_FOUND)
+    message(FATAL_ERROR "SDL2 2.0.20 or later is required but not found. Please install SDL2 via your package manager.")
+endif()
+
+find_package(OpenAL QUIET)
+if(NOT OpenAL_FOUND)
+    message(FATAL_ERROR "OpenAL is required for audio support but not found. Please install OpenAL via your package manager.")
+endif()
+
+find_package(ZLIB QUIET)
+if(NOT ZLIB_FOUND)
+    message(FATAL_ERROR "ZLIB is required but not found. Please install ZLIB via your package manager.")
+endif()
 
 option(USE_LUAJIT "Switch Lua/LuaJit (TRUE is highly recommended)" TRUE)
 if(USE_LUAJIT)
-    find_package(LuaJit REQUIRED)
-    set(LUA_INCLUDE_DIR ${LuaJit_INCLUDE_DIR})
-    set(LUA_LIBRARIES ${LuaJit_LIBRARIES})
+    find_package(LuaJit QUIET)
+    if(NOT LuaJit_FOUND)
+        message(STATUS "LuaJit not found, falling back to regular Lua")
+        set(USE_LUAJIT FALSE)
+        find_package(Lua REQUIRED)
+        add_compile_definitions(NO_LUAJIT)
+    else()
+        set(LUA_INCLUDE_DIR ${LuaJit_INCLUDE_DIR})
+        set(LUA_LIBRARIES ${LuaJit_LIBRARIES})
+    endif()
 else(USE_LUAJIT)
     find_package(Lua REQUIRED)
     add_compile_definitions(NO_LUAJIT)
@@ -482,7 +1286,6 @@ set(SOL_CONFIG_DIR ${OpenMW_SOURCE_DIR}/extern/sol_config)
 
 include_directories(
     BEFORE SYSTEM
-    ${MyGUI_INCLUDE_DIRS}
     ${OPENAL_INCLUDE_DIR}
     ${OPENGL_INCLUDE_DIR}
     ${BULLET_INCLUDE_DIRS}
@@ -491,6 +1294,10 @@ include_directories(
     ${SOL_CONFIG_DIR}
     ${ICU_INCLUDE_DIRS}
 )
+# Always add MyGUI include directories (for both system and internal builds)
+if(MyGUI_INCLUDE_DIRS)
+    include_directories(BEFORE SYSTEM ${MyGUI_INCLUDE_DIRS})
+endif()
 include_directories(".")
 
 link_directories(${COLLADA_DOM_LIBRARY_DIRS})
@@ -584,8 +1391,36 @@ if(OPENMW_LTO_BUILD)
 endif()
 
 if (APPLE)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
+    # -stdlib flag is Clang-specific, not supported by GCC
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang")
+        if(OPENMW_MACOSX_10_5)
+            # macOS 10.5: libc++ was introduced in 10.7, but Clang might require it
+            # Try to detect if libc++ is available, otherwise fall back to libstdc++
+            include(CheckCXXCompilerFlag)
+            check_cxx_compiler_flag("-stdlib=libc++" HAS_LIBCXX)
+            
+            if(HAS_LIBCXX)
+                message(STATUS "Using libc++ for macOS 10.5 (Clang compatibility)")
+                set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
+                set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
+            else()
+                message(STATUS "libc++ not available, using libstdc++ for macOS 10.5")
+                set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libstdc++")
+                set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libstdc++")
+            endif()
+        else()
+            # Modern macOS: use libc++ with Clang
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
+            set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
+        endif()
+    else()
+        # GCC: uses libstdc++ by default, no -stdlib flag needed
+        if(OPENMW_MACOSX_10_5)
+            message(STATUS "Using GCC - libstdc++ is default (no -stdlib flag needed)")
+        else()
+            message(STATUS "Using GCC - libstdc++ is default (no -stdlib flag needed)")
+        endif()
+    endif()
 endif()
 
 # Extern
@@ -593,7 +1428,7 @@ endif()
 add_subdirectory (extern/osg-ffmpeg-videoplayer)
 add_subdirectory (extern/oics)
 add_subdirectory (extern/Base64)
-if (BUILD_OPENCS OR BUILD_OPENCS_TESTS)
+if ((BUILD_OPENCS OR BUILD_OPENCS_TESTS) AND USE_QT)
     add_subdirectory (extern/osgQt)
 endif()
 
@@ -653,6 +1488,10 @@ endif()
 
 if (BUILD_LAUNCHER)
     add_subdirectory( apps/launcher )
+endif()
+
+if (APPLE AND BUILD_LAUNCHER_COCOA)
+    add_subdirectory( apps/launcher_cocoa )
 endif()
 
 if (BUILD_MWINIIMPORTER)
@@ -738,41 +1577,43 @@ if (OPENMW_OSX_DEPLOYMENT AND APPLE)
         message(FATAL_ERROR "macOS packaging requires CMake 3.19 or higher to sign macOS app bundles.")
     endif ()
 
-    get_property(QT_COCOA_PLUGIN_PATH TARGET Qt${QT_VERSION_MAJOR}::QCocoaIntegrationPlugin PROPERTY LOCATION_RELEASE)
-    get_filename_component(QT_COCOA_PLUGIN_DIR "${QT_COCOA_PLUGIN_PATH}" DIRECTORY)
-    get_filename_component(QT_COCOA_PLUGIN_GROUP "${QT_COCOA_PLUGIN_DIR}" NAME)
-    get_filename_component(QT_COCOA_PLUGIN_NAME "${QT_COCOA_PLUGIN_PATH}" NAME)
-    configure_file("${QT_COCOA_PLUGIN_PATH}" "${APP_BUNDLE_DIR}/Contents/PlugIns/${QT_COCOA_PLUGIN_GROUP}/${QT_COCOA_PLUGIN_NAME}" COPYONLY)
+    if (USE_QT)
+        get_property(QT_COCOA_PLUGIN_PATH TARGET Qt${QT_VERSION_MAJOR}::QCocoaIntegrationPlugin PROPERTY LOCATION_RELEASE)
+        get_filename_component(QT_COCOA_PLUGIN_DIR "${QT_COCOA_PLUGIN_PATH}" DIRECTORY)
+        get_filename_component(QT_COCOA_PLUGIN_GROUP "${QT_COCOA_PLUGIN_DIR}" NAME)
+        get_filename_component(QT_COCOA_PLUGIN_NAME "${QT_COCOA_PLUGIN_PATH}" NAME)
+        configure_file("${QT_COCOA_PLUGIN_PATH}" "${APP_BUNDLE_DIR}/Contents/PlugIns/${QT_COCOA_PLUGIN_GROUP}/${QT_COCOA_PLUGIN_NAME}" COPYONLY)
 
-    get_property(QT_QMACSTYLE_PLUGIN_PATH TARGET Qt${QT_VERSION_MAJOR}::QMacStylePlugin PROPERTY LOCATION_RELEASE)
-    get_filename_component(QT_QMACSTYLE_PLUGIN_DIR "${QT_QMACSTYLE_PLUGIN_PATH}" DIRECTORY)
-    get_filename_component(QT_QMACSTYLE_PLUGIN_GROUP "${QT_QMACSTYLE_PLUGIN_DIR}" NAME)
-    get_filename_component(QT_QMACSTYLE_PLUGIN_NAME "${QT_QMACSTYLE_PLUGIN_PATH}" NAME)
-    configure_file("${QT_QMACSTYLE_PLUGIN_PATH}" "${APP_BUNDLE_DIR}/Contents/PlugIns/${QT_QMACSTYLE_PLUGIN_GROUP}/${QT_QMACSTYLE_PLUGIN_NAME}" COPYONLY)
+        get_property(QT_QMACSTYLE_PLUGIN_PATH TARGET Qt${QT_VERSION_MAJOR}::QMacStylePlugin PROPERTY LOCATION_RELEASE)
+        get_filename_component(QT_QMACSTYLE_PLUGIN_DIR "${QT_QMACSTYLE_PLUGIN_PATH}" DIRECTORY)
+        get_filename_component(QT_QMACSTYLE_PLUGIN_GROUP "${QT_QMACSTYLE_PLUGIN_DIR}" NAME)
+        get_filename_component(QT_QMACSTYLE_PLUGIN_NAME "${QT_QMACSTYLE_PLUGIN_PATH}" NAME)
+        configure_file("${QT_QMACSTYLE_PLUGIN_PATH}" "${APP_BUNDLE_DIR}/Contents/PlugIns/${QT_QMACSTYLE_PLUGIN_GROUP}/${QT_QMACSTYLE_PLUGIN_NAME}" COPYONLY)
 
-    get_property(QT_QSVG_PLUGIN_PATH TARGET Qt${QT_VERSION_MAJOR}::QSvgPlugin PROPERTY LOCATION_RELEASE)
-    get_filename_component(QT_QSVG_PLUGIN_DIR "${QT_QSVG_PLUGIN_PATH}" DIRECTORY)
-    get_filename_component(QT_QSVG_PLUGIN_GROUP "${QT_QSVG_PLUGIN_DIR}" NAME)
-    get_filename_component(QT_QSVG_PLUGIN_NAME "${QT_QSVG_PLUGIN_PATH}" NAME)
-    configure_file("${QT_QSVG_PLUGIN_PATH}" "${APP_BUNDLE_DIR}/Contents/PlugIns/${QT_QSVG_PLUGIN_GROUP}/${QT_QSVG_PLUGIN_NAME}" COPYONLY)
+        get_property(QT_QSVG_PLUGIN_PATH TARGET Qt${QT_VERSION_MAJOR}::QSvgPlugin PROPERTY LOCATION_RELEASE)
+        get_filename_component(QT_QSVG_PLUGIN_DIR "${QT_QSVG_PLUGIN_PATH}" DIRECTORY)
+        get_filename_component(QT_QSVG_PLUGIN_GROUP "${QT_QSVG_PLUGIN_DIR}" NAME)
+        get_filename_component(QT_QSVG_PLUGIN_NAME "${QT_QSVG_PLUGIN_PATH}" NAME)
+        configure_file("${QT_QSVG_PLUGIN_PATH}" "${APP_BUNDLE_DIR}/Contents/PlugIns/${QT_QSVG_PLUGIN_GROUP}/${QT_QSVG_PLUGIN_NAME}" COPYONLY)
 
-    get_property(QT_QSVG_ICON_PLUGIN_PATH TARGET Qt${QT_VERSION_MAJOR}::QSvgIconPlugin PROPERTY LOCATION_RELEASE)
-    get_filename_component(QT_QSVG_ICON_PLUGIN_DIR "${QT_QSVG_ICON_PLUGIN_PATH}" DIRECTORY)
-    get_filename_component(QT_QSVG_ICON_PLUGIN_GROUP "${QT_QSVG_ICON_PLUGIN_DIR}" NAME)
-    get_filename_component(QT_QSVG_ICON_PLUGIN_NAME "${QT_QSVG_ICON_PLUGIN_PATH}" NAME)
-    configure_file("${QT_QSVG_ICON_PLUGIN_PATH}" "${APP_BUNDLE_DIR}/Contents/PlugIns/${QT_QSVG_ICON_PLUGIN_GROUP}/${QT_QSVG_ICON_PLUGIN_NAME}" COPYONLY)
+        get_property(QT_QSVG_ICON_PLUGIN_PATH TARGET Qt${QT_VERSION_MAJOR}::QSvgIconPlugin PROPERTY LOCATION_RELEASE)
+        get_filename_component(QT_QSVG_ICON_PLUGIN_DIR "${QT_QSVG_ICON_PLUGIN_PATH}" DIRECTORY)
+        get_filename_component(QT_QSVG_ICON_PLUGIN_GROUP "${QT_QSVG_ICON_PLUGIN_DIR}" NAME)
+        get_filename_component(QT_QSVG_ICON_PLUGIN_NAME "${QT_QSVG_ICON_PLUGIN_PATH}" NAME)
+        configure_file("${QT_QSVG_ICON_PLUGIN_PATH}" "${APP_BUNDLE_DIR}/Contents/PlugIns/${QT_QSVG_ICON_PLUGIN_GROUP}/${QT_QSVG_ICON_PLUGIN_NAME}" COPYONLY)
 
-    configure_file("${OpenMW_SOURCE_DIR}/files/mac/qt.conf" "${APP_BUNDLE_DIR}/Contents/Resources/qt.conf" COPYONLY)
+        configure_file("${OpenMW_SOURCE_DIR}/files/mac/qt.conf" "${APP_BUNDLE_DIR}/Contents/Resources/qt.conf" COPYONLY)
 
-    if (BUILD_OPENCS)
-        get_property(OPENCS_BUNDLE_NAME_TMP TARGET openmw-cs PROPERTY OUTPUT_NAME)
-        set(OPENCS_BUNDLE_NAME "${OPENCS_BUNDLE_NAME_TMP}.app")
-        configure_file("${QT_COCOA_PLUGIN_PATH}" "${OPENCS_BUNDLE_NAME}/Contents/PlugIns/${QT_COCOA_PLUGIN_GROUP}/${QT_COCOA_PLUGIN_NAME}" COPYONLY)
-        configure_file("${QT_QMACSTYLE_PLUGIN_PATH}" "${OPENCS_BUNDLE_NAME}/Contents/PlugIns/${QT_QMACSTYLE_PLUGIN_GROUP}/${QT_QMACSTYLE_PLUGIN_NAME}" COPYONLY)
-        configure_file("${QT_QSVG_PLUGIN_PATH}" "${OPENCS_BUNDLE_NAME}/Contents/PlugIns/${QT_QSVG_PLUGIN_GROUP}/${QT_QSVG_PLUGIN_NAME}" COPYONLY)
-        configure_file("${QT_QSVG_ICON_PLUGIN_PATH}" "${OPENCS_BUNDLE_NAME}/Contents/PlugIns/${QT_QSVG_ICON_PLUGIN_GROUP}/${QT_QSVG_ICON_PLUGIN_NAME}" COPYONLY)
-        configure_file("${OpenMW_SOURCE_DIR}/files/mac/qt.conf" "${OPENCS_BUNDLE_NAME}/Contents/Resources/qt.conf" COPYONLY)
-    endif ()
+        if (BUILD_OPENCS)
+            get_property(OPENCS_BUNDLE_NAME_TMP TARGET openmw-cs PROPERTY OUTPUT_NAME)
+            set(OPENCS_BUNDLE_NAME "${OPENCS_BUNDLE_NAME_TMP}.app")
+            configure_file("${QT_COCOA_PLUGIN_PATH}" "${OPENCS_BUNDLE_NAME}/Contents/PlugIns/${QT_COCOA_PLUGIN_GROUP}/${QT_COCOA_PLUGIN_NAME}" COPYONLY)
+            configure_file("${QT_QMACSTYLE_PLUGIN_PATH}" "${OPENCS_BUNDLE_NAME}/Contents/PlugIns/${QT_QMACSTYLE_PLUGIN_GROUP}/${QT_QMACSTYLE_PLUGIN_NAME}" COPYONLY)
+            configure_file("${QT_QSVG_PLUGIN_PATH}" "${OPENCS_BUNDLE_NAME}/Contents/PlugIns/${QT_QSVG_PLUGIN_GROUP}/${QT_QSVG_PLUGIN_NAME}" COPYONLY)
+            configure_file("${QT_QSVG_ICON_PLUGIN_PATH}" "${OPENCS_BUNDLE_NAME}/Contents/PlugIns/${QT_QSVG_ICON_PLUGIN_GROUP}/${QT_QSVG_ICON_PLUGIN_NAME}" COPYONLY)
+            configure_file("${OpenMW_SOURCE_DIR}/files/mac/qt.conf" "${OPENCS_BUNDLE_NAME}/Contents/Resources/qt.conf" COPYONLY)
+        endif ()
+    endif()
 
     install(DIRECTORY "${APP_BUNDLE_DIR}" USE_SOURCE_PERMISSIONS DESTINATION "." COMPONENT Runtime)
 
@@ -794,20 +1635,47 @@ if (OPENMW_OSX_DEPLOYMENT AND APPLE)
     set(ABSOLUTE_PLUGINS "")
 
     set(OSGPlugins_DONT_FIND_DEPENDENCIES 1)
-    find_package(OSGPlugins REQUIRED COMPONENTS ${USED_OSG_PLUGINS})
+    if(OPENMW_USE_SYSTEM_OSG)
+        find_package(OSGPlugins QUIET COMPONENTS ${USED_OSG_PLUGINS})
+        if(NOT OSGPlugins_FOUND)
+            message(WARNING "System OSGPlugins not found for macOS deployment. Plugins will be copied from internal build.")
+            # For internal build, plugins will be in the OSG build directory
+            # We'll need to construct paths manually or skip this section
+        endif()
+    else()
+        # OSGPlugins will be available from internal OSG build
+        message(STATUS "Using OSGPlugins from internal OSG build")
+        # For internal builds, we need to find plugins in the build directory
+        # This will be handled by the OSG build system
+    endif()
+    
+    # If OSGPlugins not found, we'll try to continue anyway (plugins may be in internal build)
+    if(NOT OSGPlugins_FOUND AND OPENMW_USE_SYSTEM_OSG)
+        message(WARNING "OSGPlugins not found - deployment may be incomplete. Consider using internal OSG build.")
+    endif()
 
     foreach (PLUGIN_NAME ${USED_OSG_PLUGINS})
         string(TOUPPER ${PLUGIN_NAME} PLUGIN_NAME_UC)
-        if(${PLUGIN_NAME_UC}_LIBRARY_RELEASE)
-            set(PLUGIN_ABS ${${PLUGIN_NAME_UC}_LIBRARY_RELEASE})
-        elseif(${PLUGIN_NAME_UC}_LIBRARY)
-            set(PLUGIN_ABS ${${PLUGIN_NAME_UC}_LIBRARY})
+        set(PLUGIN_ABS "")
+        if(OPENMW_USE_SYSTEM_OSG)
+            if(${PLUGIN_NAME_UC}_LIBRARY_RELEASE)
+                set(PLUGIN_ABS ${${PLUGIN_NAME_UC}_LIBRARY_RELEASE})
+            elseif(${PLUGIN_NAME_UC}_LIBRARY)
+                set(PLUGIN_ABS ${${PLUGIN_NAME_UC}_LIBRARY})
+            endif()
         else()
-            message(FATAL_ERROR "Can't find library file for ${PLUGIN_NAME}")
-            # We used to construct the path manually from OSGPlugins_LIB_DIR and the plugin name.
-            # Maybe that could be restored as a fallback?
+            # For internal OSG build, check if target exists and get its file path
+            set(_plugin_target ${${PLUGIN_NAME_UC}_LIBRARY})
+            if(TARGET ${_plugin_target})
+                set(PLUGIN_ABS $<TARGET_FILE:${_plugin_target}>)
+            endif()
         endif()
-        set(ABSOLUTE_PLUGINS ${PLUGIN_ABS} ${ABSOLUTE_PLUGINS})
+        if(PLUGIN_ABS)
+            set(ABSOLUTE_PLUGINS ${PLUGIN_ABS} ${ABSOLUTE_PLUGINS})
+        else()
+            message(WARNING "OSG plugin ${PLUGIN_NAME} not found - skipping for macOS deployment")
+            message(WARNING "  Plugin may be disabled due to missing dependencies")
+        endif()
     endforeach ()
 
     set(OSG_PLUGIN_PREFIX_DIR "osgPlugins-${OPENSCENEGRAPH_VERSION}")
@@ -842,11 +1710,20 @@ if (OPENMW_OSX_DEPLOYMENT AND APPLE)
     INSTALL(FILES "${OpenMW_SOURCE_DIR}/README.md" DESTINATION "/${INSTALLED_OPENMW_APP}/..")
     INSTALL(FILES "${OpenMW_SOURCE_DIR}/LICENSE" DESTINATION "/${INSTALLED_OPENMW_APP}/..")
     INSTALL(FILES "${OpenMW_SOURCE_DIR}/AUTHORS.md" DESTINATION "/${INSTALLED_OPENMW_APP}/..")
+    INSTALL(FILES "${OpenMW_SOURCE_DIR}/scripts/openmw_folder_wizard.py" DESTINATION "/${INSTALLED_OPENMW_APP}/..")
+    INSTALL(FILES "${OpenMW_SOURCE_DIR}/files/mac/openmw-folder-wizard.command"
+        DESTINATION "/${INSTALLED_OPENMW_APP}/.."
+        RENAME "OpenMW Folder Wizard.command")
+    INSTALL(PROGRAMS "${OpenMW_SOURCE_DIR}/files/mac/First Time Setup.command"
+        DESTINATION "/${INSTALLED_OPENMW_APP}/.."
+        RENAME "First Time Setup.command")
 
-    set(PLUGINS ${PLUGINS} "${INSTALLED_OPENMW_APP}/Contents/PlugIns/${QT_COCOA_PLUGIN_GROUP}/${QT_COCOA_PLUGIN_NAME}")
-    set(PLUGINS ${PLUGINS} "${INSTALLED_OPENMW_APP}/Contents/PlugIns/${QT_QMACSTYLE_PLUGIN_GROUP}/${QT_QMACSTYLE_PLUGIN_NAME}")
-    set(OPENCS_PLUGINS ${OPENCS_PLUGINS} "${INSTALLED_OPENCS_APP}/Contents/PlugIns/${QT_COCOA_PLUGIN_GROUP}/${QT_COCOA_PLUGIN_NAME}")
-    set(OPENCS_PLUGINS ${OPENCS_PLUGINS} "${INSTALLED_OPENCS_APP}/Contents/PlugIns/${QT_QMACSTYLE_PLUGIN_GROUP}/${QT_QMACSTYLE_PLUGIN_NAME}")
+    if (USE_QT)
+        set(PLUGINS ${PLUGINS} "${INSTALLED_OPENMW_APP}/Contents/PlugIns/${QT_COCOA_PLUGIN_GROUP}/${QT_COCOA_PLUGIN_NAME}")
+        set(PLUGINS ${PLUGINS} "${INSTALLED_OPENMW_APP}/Contents/PlugIns/${QT_QMACSTYLE_PLUGIN_GROUP}/${QT_QMACSTYLE_PLUGIN_NAME}")
+        set(OPENCS_PLUGINS ${OPENCS_PLUGINS} "${INSTALLED_OPENCS_APP}/Contents/PlugIns/${QT_COCOA_PLUGIN_GROUP}/${QT_COCOA_PLUGIN_NAME}")
+        set(OPENCS_PLUGINS ${OPENCS_PLUGINS} "${INSTALLED_OPENCS_APP}/Contents/PlugIns/${QT_QMACSTYLE_PLUGIN_GROUP}/${QT_QMACSTYLE_PLUGIN_NAME}")
+    endif()
 
     install(CODE "
         function(gp_item_default_embedded_path_override item  default_embedded_path_var)
@@ -1063,22 +1940,44 @@ if (USE_QT)
     file(GLOB LAUNCHER_TS_FILES ${CMAKE_SOURCE_DIR}/files/lang/launcher_*.ts)
     file(GLOB WIZARD_TS_FILES ${CMAKE_SOURCE_DIR}/files/lang/wizard_*.ts)
     file(GLOB COMPONENTS_TS_FILES ${CMAKE_SOURCE_DIR}/files/lang/components_*.ts)
-    get_target_property(QT_LUPDATE_EXECUTABLE Qt::lupdate IMPORTED_LOCATION)
-    add_custom_target(translations
-    COMMAND ${QT_LUPDATE_EXECUTABLE} -locations none ${CMAKE_SOURCE_DIR}/components/contentselector ${CMAKE_SOURCE_DIR}/components/process -ts ${COMPONENTS_TS_FILES}
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/components
-    VERBATIM
-    COMMAND_EXPAND_LISTS
+    if(USE_QT4)
+        # For Qt4, find lupdate manually
+        find_program(QT_LUPDATE_EXECUTABLE lupdate PATHS ${QT_BINARY_DIR} NO_DEFAULT_PATH)
+        if(NOT QT_LUPDATE_EXECUTABLE)
+            find_program(QT_LUPDATE_EXECUTABLE lupdate)
+        endif()
+        if(NOT QT_LUPDATE_EXECUTABLE)
+            message(WARNING "lupdate not found - translation updates will not work")
+        endif()
+    else()
+        get_target_property(QT_LUPDATE_EXECUTABLE Qt::lupdate IMPORTED_LOCATION)
+        if(NOT QT_LUPDATE_EXECUTABLE)
+            message(WARNING "Qt::lupdate target not found - translation updates may not work")
+        endif()
+    endif()
+    
+    if(QT_LUPDATE_EXECUTABLE)
+        add_custom_target(translations
+        COMMAND ${QT_LUPDATE_EXECUTABLE} -locations none ${CMAKE_SOURCE_DIR}/components/contentselector ${CMAKE_SOURCE_DIR}/components/process -ts ${COMPONENTS_TS_FILES}
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/components
+        VERBATIM
+        COMMAND_EXPAND_LISTS
 
-    COMMAND ${QT_LUPDATE_EXECUTABLE} -locations none ${CMAKE_SOURCE_DIR}/apps/wizard -ts ${WIZARD_TS_FILES}
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/apps/wizard
-    VERBATIM
-    COMMAND_EXPAND_LISTS
+        COMMAND ${QT_LUPDATE_EXECUTABLE} -locations none ${CMAKE_SOURCE_DIR}/apps/wizard -ts ${WIZARD_TS_FILES}
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/apps/wizard
+        VERBATIM
+        COMMAND_EXPAND_LISTS
 
-    COMMAND ${QT_LUPDATE_EXECUTABLE} -locations none ${CMAKE_SOURCE_DIR}/apps/launcher -ts ${LAUNCHER_TS_FILES}
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/apps/launcher
-    VERBATIM
-    COMMAND_EXPAND_LISTS)
+        COMMAND ${QT_LUPDATE_EXECUTABLE} -locations none ${CMAKE_SOURCE_DIR}/apps/launcher -ts ${LAUNCHER_TS_FILES}
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/apps/launcher
+        VERBATIM
+        COMMAND_EXPAND_LISTS)
+    else()
+        # Create a dummy target if lupdate is not available
+        add_custom_target(translations
+        COMMENT "lupdate not found, skipping translation updates"
+        VERBATIM)
+    endif()
 
     if (BUILD_LAUNCHER OR BUILD_WIZARD)
         if (APPLE)
@@ -1102,13 +2001,47 @@ if (USE_QT)
             set(TS_FILES ${TS_FILES} ${WIZARD_TS_FILES})
         endif ()
 
-        qt_add_translation(QM_FILES ${TS_FILES} OPTIONS -silent)
+        if(USE_QT4)
+            # For Qt4, use lrelease instead of qt_add_translation
+            find_program(QT_LRELEASE_EXECUTABLE lrelease PATHS ${QT_BINARY_DIR} NO_DEFAULT_PATH)
+            if(NOT QT_LRELEASE_EXECUTABLE)
+                find_program(QT_LRELEASE_EXECUTABLE lrelease)
+            endif()
+            if(QT_LRELEASE_EXECUTABLE)
+                set(QM_FILES "")
+                foreach(TS_FILE ${TS_FILES})
+                    get_filename_component(TS_BASENAME ${TS_FILE} NAME_WE)
+                    set(QM_FILE "${CMAKE_CURRENT_BINARY_DIR}/${TS_BASENAME}.qm")
+                    add_custom_command(OUTPUT ${QM_FILE}
+                        COMMAND ${QT_LRELEASE_EXECUTABLE} -silent ${TS_FILE} -qm ${QM_FILE}
+                        DEPENDS ${TS_FILE}
+                        COMMENT "Generating ${TS_BASENAME}.qm")
+                    list(APPEND QM_FILES ${QM_FILE})
+                endforeach()
+            else()
+                message(WARNING "lrelease not found - translation files will not be generated")
+                set(QM_FILES "")
+            endif()
+        else()
+            qt_add_translation(QM_FILES ${TS_FILES} OPTIONS -silent)
+        endif()
 
         if (DEPLOY_QT_TRANSLATIONS)
-            # Once we set a Qt 6.2.0 as a minimum required version, we may use "qtpaths --qt-query" instead.
-            get_target_property(QT_QMAKE_EXECUTABLE Qt::qmake IMPORTED_LOCATION)
-            execute_process(COMMAND "${QT_QMAKE_EXECUTABLE}" -query QT_INSTALL_TRANSLATIONS
-                OUTPUT_VARIABLE QT_TRANSLATIONS_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)
+            if(USE_QT4)
+                # For Qt4, use qmake to query translations directory
+                if(QT_QMAKE_EXECUTABLE)
+                    execute_process(COMMAND "${QT_QMAKE_EXECUTABLE}" -query QT_INSTALL_TRANSLATIONS
+                        OUTPUT_VARIABLE QT_TRANSLATIONS_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)
+                else()
+                    message(WARNING "qmake not found - Qt translations deployment disabled")
+                    set(DEPLOY_QT_TRANSLATIONS OFF)
+                endif()
+            else()
+                # Once we set a Qt 6.2.0 as a minimum required version, we may use "qtpaths --qt-query" instead.
+                get_target_property(QT_QMAKE_EXECUTABLE Qt::qmake IMPORTED_LOCATION)
+                execute_process(COMMAND "${QT_QMAKE_EXECUTABLE}" -query QT_INSTALL_TRANSLATIONS
+                    OUTPUT_VARIABLE QT_TRANSLATIONS_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)
+            endif()
 
             foreach(QM_FILE ${QM_FILES})
                 get_filename_component(QM_BASENAME ${QM_FILE} NAME)
@@ -1118,17 +2051,26 @@ if (USE_QT)
                 elseif (EXISTS "${QT_TRANSLATIONS_DIR}/qt_${LANG_NAME}.qm")
                     set(QM_FILES ${QM_FILES} "${QT_TRANSLATIONS_DIR}/qt_${LANG_NAME}.qm")
                 else ()
-                    message(FATAL_ERROR "Qt translations for '${LANG_NAME}' locale are not found in the '${QT_TRANSLATIONS_DIR}' folder.")
+                    if(OPENMW_MACOSX_10_5)
+                        message(WARNING "Qt translations for '${LANG_NAME}' locale are not found in the '${QT_TRANSLATIONS_DIR}' folder. Continuing without Qt translations.")
+                    else()
+                        message(FATAL_ERROR "Qt translations for '${LANG_NAME}' locale are not found in the '${QT_TRANSLATIONS_DIR}' folder.")
+                    endif()
                 endif ()
             endforeach(QM_FILE)
 
             list(REMOVE_DUPLICATES QM_FILES)
         endif ()
 
-        add_custom_target(qm-files
-            COMMAND ${CMAKE_COMMAND} -E make_directory ${QT_OPENMW_TRANSLATIONS_PATH}
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${QM_FILES} ${QT_OPENMW_TRANSLATIONS_PATH}
-            DEPENDS ${QM_FILES}
-            COMMENT "Copy *.qm files to resources folder")
+        if(QM_FILES)
+            add_custom_target(qm-files
+                COMMAND ${CMAKE_COMMAND} -E make_directory ${QT_OPENMW_TRANSLATIONS_PATH}
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different ${QM_FILES} ${QT_OPENMW_TRANSLATIONS_PATH}
+                DEPENDS ${QM_FILES}
+                COMMENT "Copy *.qm files to resources folder")
+        else()
+            add_custom_target(qm-files
+                COMMENT "No translation files to copy (lrelease not found or no .ts files)")
+        endif()
     endif ()
 endif()

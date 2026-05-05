@@ -479,7 +479,8 @@ namespace MWRender
         mCounter = nullptr;
         mRainParticleSystem = nullptr;
         mRainShooter = nullptr;
-        mPrecipitationOccluder->disable();
+        if (mPrecipitationOccluder)
+            mPrecipitationOccluder->disable();
     }
 
     SkyManager::~SkyManager()
@@ -580,7 +581,8 @@ namespace MWRender
         mAtmosphereNightRoll += timeScale * duration * osg::DegreesToRadians(360.f) / (3600 * 96.f);
         if (mAtmosphereNightNode->getNodeMask() != 0)
             mAtmosphereNightNode->setAttitude(osg::Quat(mAtmosphereNightRoll, osg::Vec3f(0, 0, 1)));
-        mPrecipitationOccluder->update();
+        if (mPrecipitationOccluder)
+            mPrecipitationOccluder->update();
     }
 
     void SkyManager::setEnabled(bool enabled)
@@ -624,7 +626,8 @@ namespace MWRender
             mPlacer->setZRange(-rainRange.z() / 2, rainRange.z() / 2);
 
             mCounter->setNumberOfParticlesPerSecondToCreate(mRainMaxRaindrops / mRainEntranceSpeed * 20);
-            mPrecipitationOccluder->updateRange(rainRange);
+            if (mPrecipitationOccluder)
+                mPrecipitationOccluder->updateRange(rainRange);
         }
     }
 
@@ -692,7 +695,8 @@ namespace MWRender
                 }
                 if (mRainEffect.empty())
                 {
-                    mPrecipitationOccluder->disable();
+                    if (mPrecipitationOccluder)
+                        mPrecipitationOccluder->disable();
                 }
             }
             else

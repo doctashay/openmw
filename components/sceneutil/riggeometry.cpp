@@ -1,5 +1,6 @@
 #include "riggeometry.hpp"
 
+#include <cstring>
 #include <unordered_map>
 
 #include <osg/MatrixTransform>
@@ -12,6 +13,78 @@
 
 #include "skeleton.hpp"
 #include "util.hpp"
+
+#if defined(OPENMW_HAVE_ALTIVEC)
+#include <altivec.h>
+#ifdef bool
+#undef bool
+#endif
+#ifdef vector
+#undef vector
+#endif
+#ifdef pixel
+#undef pixel
+#endif
+#endif
+
+namespace
+{
+#if defined(OPENMW_HAVE_ALTIVEC)
+    using FloatVector = __vector float;
+
+    inline FloatVector loadFloatVector(const float* data)
+    {
+        FloatVector result;
+        std::memcpy(&result, data, sizeof(result));
+        return result;
+    }
+
+    inline void storeFloatVector(float* data, FloatVector value)
+    {
+        std::memcpy(data, &value, sizeof(value));
+    }
+
+    inline void transposeRowsToColumns(
+        FloatVector r0, FloatVector r1, FloatVector r2, FloatVector r3, FloatVector& c0, FloatVector& c1,
+        FloatVector& c2, FloatVector& c3)
+    {
+        const FloatVector t0 = vec_mergeh(r0, r2);
+        const FloatVector t1 = vec_mergel(r0, r2);
+        const FloatVector t2 = vec_mergeh(r1, r3);
+        const FloatVector t3 = vec_mergel(r1, r3);
+
+        c0 = vec_mergeh(t0, t2);
+        c1 = vec_mergel(t0, t2);
+        c2 = vec_mergeh(t1, t3);
+        c3 = vec_mergel(t1, t3);
+    }
+
+    inline osg::Vec3f transformAffinePoint(
+        const FloatVector& c0, const FloatVector& c1, const FloatVector& c2, const FloatVector& c3,
+        const osg::Vec3f& value)
+    {
+        const FloatVector x = vec_splats(value.x());
+        const FloatVector y = vec_splats(value.y());
+        const FloatVector z = vec_splats(value.z());
+        const FloatVector result = vec_madd(c0, x, vec_madd(c1, y, vec_madd(c2, z, c3)));
+        alignas(16) float output[4];
+        storeFloatVector(output, result);
+        return osg::Vec3f(output[0], output[1], output[2]);
+    }
+
+    inline osg::Vec3f transformDirection3x3(
+        const FloatVector& c0, const FloatVector& c1, const FloatVector& c2, const osg::Vec3f& value)
+    {
+        const FloatVector x = vec_splats(value.x());
+        const FloatVector y = vec_splats(value.y());
+        const FloatVector z = vec_splats(value.z());
+        const FloatVector result = vec_madd(c0, x, vec_madd(c1, y, c2 * z));
+        alignas(16) float output[4];
+        storeFloatVector(output, result);
+        return osg::Vec3f(output[0], output[1], output[2]);
+    }
+#endif
+}
 
 namespace SceneUtil
 {
@@ -192,6 +265,33 @@ namespace SceneUtil
         {
             osg::Matrixf resultMat(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1);
 
+#if defined(OPENMW_HAVE_ALTIVEC)
+            FloatVector blendedRows[4] = {
+                vec_splats(0.0f),
+                vec_splats(0.0f),
+                vec_splats(0.0f),
+                vec_splats(0.0f),
+            };
+            const FloatVector affineMask = (__vector float){ 1.0f, 1.0f, 1.0f, 0.0f };
+
+            for (const auto& [index, weight] : influences)
+            {
+                if (mNodes[index] == nullptr)
+                    continue;
+                const FloatVector weightVector = vec_splats(weight);
+                const float* boneMatPtr = boneMatrices[index].ptr();
+                for (int row = 0; row < 4; ++row)
+                {
+                    const FloatVector sourceRow = loadFloatVector(boneMatPtr + row * 4);
+                    blendedRows[row] = vec_madd(sourceRow, weightVector * affineMask, blendedRows[row]);
+                }
+            }
+
+            float* resultMatPtr = resultMat.ptr();
+            for (int row = 0; row < 4; ++row)
+                storeFloatVector(resultMatPtr + row * 4, blendedRows[row]);
+            resultMatPtr[15] = 1.0f;
+#else
             for (const auto& [index, weight] : influences)
             {
                 if (mNodes[index] == nullptr)
@@ -202,9 +302,34 @@ namespace SceneUtil
                     if (i % 4 != 3)
                         *resultMatPtr += *boneMatPtr * weight;
             }
+#endif
 
             resultMat *= transform;
 
+#if defined(OPENMW_HAVE_ALTIVEC)
+            FloatVector c0;
+            FloatVector c1;
+            FloatVector c2;
+            FloatVector c3;
+            const float* resultMatPtr = resultMat.ptr();
+            transposeRowsToColumns(loadFloatVector(resultMatPtr), loadFloatVector(resultMatPtr + 4),
+                loadFloatVector(resultMatPtr + 8), loadFloatVector(resultMatPtr + 12), c0, c1, c2, c3);
+
+            for (unsigned short vertex : vertices)
+            {
+                (*positionDst)[vertex] = transformAffinePoint(c0, c1, c2, c3, (*positionSrc)[vertex]);
+                if (normalDst)
+                    (*normalDst)[vertex] = transformDirection3x3(c0, c1, c2, (*normalSrc)[vertex]);
+
+                if (tangentDst)
+                {
+                    const osg::Vec4f& srcTangent = (*tangentSrc)[vertex];
+                    const osg::Vec3f transformedTangent = transformDirection3x3(
+                        c0, c1, c2, osg::Vec3f(srcTangent.x(), srcTangent.y(), srcTangent.z()));
+                    (*tangentDst)[vertex] = osg::Vec4f(transformedTangent, srcTangent.w());
+                }
+            }
+#else
             for (unsigned short vertex : vertices)
             {
                 (*positionDst)[vertex] = resultMat.preMult((*positionSrc)[vertex]);
@@ -219,6 +344,7 @@ namespace SceneUtil
                     (*tangentDst)[vertex] = osg::Vec4f(transformedTangent, srcTangent.w());
                 }
             }
+#endif
         }
 
         positionDst->dirty();

@@ -122,13 +122,46 @@ namespace SDLUtil
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, major);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, minor);
+#else
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
 #endif
 
-        mContext = SDL_GL_CreateContext(mWindow);
-        if (!mContext)
+        auto tryCreateContext = [&]() -> bool
         {
-            OSG_FATAL << "Error: Unable to create OpenGL graphics context: " << SDL_GetError() << std::endl;
-            return;
+            mContext = SDL_GL_CreateContext(mWindow);
+            if (!mContext)
+                return false;
+
+            if (SDL_GL_MakeCurrent(mWindow, mContext) != 0)
+            {
+                SDL_GL_DeleteContext(mContext);
+                mContext = nullptr;
+                return false;
+            }
+
+            return true;
+        };
+
+        if (!tryCreateContext())
+        {
+#ifdef OPENMW_MACOSX_10_5
+            Log(Debug::Warning)
+                << "Initial GL 2.0 compatibility context request failed; retrying with legacy context attributes";
+            SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
+            SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, 0);
+            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 0);
+            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+            tryCreateContext();
+#endif
+
+            if (!mContext)
+            {
+                OSG_FATAL << "Error: Unable to create a usable OpenGL graphics context: " << SDL_GetError()
+                          << std::endl;
+                return;
+            }
         }
 
 #ifdef OPENMW_GL4ES_MANUAL_INIT

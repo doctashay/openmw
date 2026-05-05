@@ -1,5 +1,7 @@
 #include "format.hpp"
 
+#include <components/misc/endianness.hpp>
+
 #include <cstring>
 #include <istream>
 #include <stdexcept>
@@ -29,6 +31,9 @@ namespace ESM
         stream.read(reinterpret_cast<char*>(&format), sizeof(format));
         if (stream.gcount() != sizeof(format))
             throw std::runtime_error("Not enough bytes to read file header");
+        // ESM files are little-endian, convert on big-endian systems
+        if constexpr (Misc::IS_BIG_ENDIAN)
+            format = Misc::fromLittleEndian(format);
         return toFormat(format);
     }
 
@@ -38,6 +43,9 @@ namespace ESM
             throw std::logic_error("Invalid format value: " + std::string(value));
         std::uint32_t format;
         std::memcpy(&format, value.data(), sizeof(std::uint32_t));
+        // ESM files are little-endian, convert on big-endian systems
+        if constexpr (Misc::IS_BIG_ENDIAN)
+            format = Misc::fromLittleEndian(format);
         return toFormat(format);
     }
 }

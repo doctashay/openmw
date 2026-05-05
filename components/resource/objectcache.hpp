@@ -94,6 +94,20 @@ namespace Resource
 
                     return true;
                 });
+
+                if (mMaxSize > 0 && mItems.size() > mMaxSize)
+                {
+                    std::vector<std::pair<KeyType, double>> evictionCandidates;
+                    evictionCandidates.reserve(mItems.size());
+                    for (const auto& [k, v] : mItems)
+                        if (v.mValue != nullptr && v.mValue->referenceCount() == 1)
+                            evictionCandidates.emplace_back(k, v.mLastUsage);
+                    std::sort(evictionCandidates.begin(), evictionCandidates.end(),
+                        [](const auto& a, const auto& b) { return a.second < b.second; });
+                    const std::size_t toRemove = mItems.size() - mMaxSize;
+                    for (std::size_t i = 0; i < toRemove && i < evictionCandidates.size(); ++i)
+                        mItems.erase(evictionCandidates[i].first);
+                }
             }
             // remove expired items from cache
             objectsToRemove.clear();
@@ -106,6 +120,8 @@ namespace Resource
             mItems.clear();
         }
 
+        void setMaxSize(std::size_t maxSize) { mMaxSize = maxSize; }
+
         /** Add a key,object,timestamp triple to the Registry::ObjectCache.*/
         template <class K>
         void addEntryToObjectCache(K&& key, osg::Object* object, double timestamp = 0.0)
@@ -116,6 +132,22 @@ namespace Resource
                 mItems.emplace_hint(it, std::forward<K>(key), Item{ object, timestamp });
             else
                 it->second = Item{ object, timestamp };
+
+            if (mMaxSize == 0 || mItems.size() <= mMaxSize)
+                return;
+
+            std::vector<std::pair<KeyType, double>> evictionCandidates;
+            evictionCandidates.reserve(mItems.size());
+            for (const auto& [k, v] : mItems)
+                if (v.mValue != nullptr && v.mValue->referenceCount() == 1)
+                    evictionCandidates.emplace_back(k, v.mLastUsage);
+
+            std::sort(evictionCandidates.begin(), evictionCandidates.end(),
+                [](const auto& a, const auto& b) { return a.second < b.second; });
+
+            const std::size_t toRemove = mItems.size() - mMaxSize;
+            for (std::size_t i = 0; i < toRemove && i < evictionCandidates.size(); ++i)
+                mItems.erase(evictionCandidates[i].first);
         }
 
         /** Remove Object from cache.*/
@@ -209,6 +241,7 @@ namespace Resource
 
         std::map<KeyType, Item, std::less<>> mItems;
         mutable std::mutex mMutex;
+        std::size_t mMaxSize = 0;
         std::size_t mGet = 0;
         std::size_t mHit = 0;
         std::size_t mExpired = 0;

@@ -20,11 +20,34 @@
 
 #include <algorithm>
 #include <array>
+#include <cstring>
+
+#if defined(OPENMW_HAVE_ALTIVEC)
+#include <altivec.h>
+#ifdef bool
+#undef bool
+#endif
+#ifdef vector
+#undef vector
+#endif
+#ifdef pixel
+#undef pixel
+#endif
+#endif
 
 namespace DetourNavigator
 {
     namespace
     {
+#if defined(OPENMW_HAVE_ALTIVEC)
+        using FloatVector = __vector float;
+
+        inline void storeFloatVector(float* data, FloatVector value)
+        {
+            std::memcpy(data, &value, sizeof(value));
+        }
+#endif
+
         constexpr int walkableRadiusUpperLimit = 255;
 
         struct Rectangle
@@ -194,25 +217,70 @@ namespace DetourNavigator
             return std::all_of(begin, end, isSupportedCoordinate);
         }
 
+        [[nodiscard]] bool convertVerticesToNavMeshCoordinatesInPlace(
+            const RecastSettings& settings, std::vector<float>& vertices)
+        {
+            constexpr std::size_t coordinatesPerVertex = 3;
+            std::size_t i = 0;
+
+#if defined(OPENMW_HAVE_ALTIVEC)
+            const FloatVector scale = vec_splats(settings.mRecastScaleFactor);
+            alignas(16) float xs[4];
+            alignas(16) float ys[4];
+            alignas(16) float zs[4];
+
+            for (; i + 12 <= vertices.size(); i += 12)
+            {
+                FloatVector x = (__vector float){ vertices[i], vertices[i + 3], vertices[i + 6], vertices[i + 9] };
+                FloatVector y
+                    = (__vector float){ vertices[i + 1], vertices[i + 4], vertices[i + 7], vertices[i + 10] };
+                FloatVector z
+                    = (__vector float){ vertices[i + 2], vertices[i + 5], vertices[i + 8], vertices[i + 11] };
+
+                x *= scale;
+                y *= scale;
+                z *= scale;
+
+                storeFloatVector(xs, x);
+                storeFloatVector(ys, y);
+                storeFloatVector(zs, z);
+
+                for (std::size_t vertex = 0; vertex < 4; ++vertex)
+                {
+                    if (!isSupportedCoordinate(xs[vertex]) || !isSupportedCoordinate(ys[vertex])
+                        || !isSupportedCoordinate(zs[vertex]))
+                        return false;
+
+                    vertices[i + vertex * coordinatesPerVertex] = xs[vertex];
+                    vertices[i + vertex * coordinatesPerVertex + 1] = zs[vertex];
+                    vertices[i + vertex * coordinatesPerVertex + 2] = ys[vertex];
+                }
+            }
+#endif
+
+            for (; i < vertices.size(); i += coordinatesPerVertex)
+            {
+                const float x = toNavMeshCoordinates(settings, vertices[i]);
+                const float y = toNavMeshCoordinates(settings, vertices[i + 1]);
+                const float z = toNavMeshCoordinates(settings, vertices[i + 2]);
+                if (!isSupportedCoordinate(x) || !isSupportedCoordinate(y) || !isSupportedCoordinate(z))
+                    return false;
+                vertices[i] = x;
+                vertices[i + 1] = z;
+                vertices[i + 2] = y;
+            }
+
+            return true;
+        }
+
         [[nodiscard]] bool rasterizeTriangles(RecastContext& context, const Mesh& mesh, const RecastSettings& settings,
             const RecastParams& params, rcHeightfield& solid)
         {
             std::vector<unsigned char> areas(mesh.getAreaTypes().begin(), mesh.getAreaTypes().end());
             std::vector<float> vertices = mesh.getVertices();
 
-            constexpr std::size_t verticesPerTriangle = 3;
-
-            for (std::size_t i = 0; i < vertices.size(); i += verticesPerTriangle)
-            {
-                for (std::size_t j = 0; j < verticesPerTriangle; ++j)
-                {
-                    const float coordinate = toNavMeshCoordinates(settings, vertices[i + j]);
-                    if (!isSupportedCoordinate(coordinate))
-                        return false;
-                    vertices[i + j] = coordinate;
-                }
-                std::swap(vertices[i + 1], vertices[i + 2]);
-            }
+            if (!convertVerticesToNavMeshCoordinatesInPlace(settings, vertices))
+                return false;
 
             rcClearUnwalkableTriangles(&context, settings.mMaxSlope, vertices.data(),
                 static_cast<int>(mesh.getVerticesCount()), mesh.getIndices().data(), static_cast<int>(areas.size()),

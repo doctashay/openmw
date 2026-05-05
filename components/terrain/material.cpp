@@ -171,6 +171,10 @@ namespace
         {
             mValue->setCombine_RGB(osg::TexEnvCombine::REPLACE);
             mValue->setSource0_RGB(osg::TexEnvCombine::PREVIOUS);
+            mValue->setOperand0_RGB(osg::TexEnvCombine::SRC_COLOR);
+            mValue->setCombine_Alpha(osg::TexEnvCombine::REPLACE);
+            mValue->setSource0_Alpha(osg::TexEnvCombine::TEXTURE);
+            mValue->setOperand0_Alpha(osg::TexEnvCombine::SRC_ALPHA);
         }
     };
 

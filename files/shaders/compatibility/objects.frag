@@ -1,4 +1,4 @@
-#version 120
+#version 110
 #pragma import_defines(FORCE_OPAQUE, DISTORTION)
 
 #if @useUBO
@@ -71,10 +71,10 @@ uniform float distortionStrength;
 #define PER_PIXEL_LIGHTING (@normalMap || @specularMap || @forcePPL)
 
 #if !PER_PIXEL_LIGHTING
-centroid varying vec3 passLighting;
-centroid varying vec3 passSpecular;
-centroid varying vec3 shadowDiffuseLighting;
-centroid varying vec3 shadowSpecularLighting;
+varying vec3 passLighting;
+varying vec3 passSpecular;
+varying vec3 shadowDiffuseLighting;
+varying vec3 shadowSpecularLighting;
 #else
 uniform float emissiveMult;
 uniform float specStrength;
@@ -137,9 +137,9 @@ vec2 screenCoords = gl_FragCoord.xy / screenRes;
 #if @diffuseMap
     gl_FragData[0] = texture2D(diffuseMap, diffuseMapUV + offset);
 
-#if defined(DISTORTION) && DISTORTION
+#if DISTORTION
     gl_FragData[0].a *= getDiffuseColor().a;
-    gl_FragData[0] = applyDistortion(gl_FragData[0], distortionStrength, gl_FragCoord.z, sampleOpaqueDepthTex(screenCoords / @distorionRTRatio).x);
+    gl_FragData[0] = applyDistortion(gl_FragData[0], distortionStrength, gl_FragCoord.z, sampleOpaqueDepthTex(screenCoords / 0.25).x);
     return;
 #endif
 
@@ -237,8 +237,10 @@ vec2 screenCoords = gl_FragCoord.xy / screenRes;
     clampLightingResult(lighting);
     gl_FragData[0].xyz = gl_FragData[0].xyz * lighting + specular;
 
-#if @envMap && !@preLightEnv
+#if @envMap
+#if !@preLightEnv
     gl_FragData[0].xyz += envEffect;
+#endif
 #endif
 
 #if @emissiveMap
@@ -247,7 +249,8 @@ vec2 screenCoords = gl_FragCoord.xy / screenRes;
 
     gl_FragData[0] = applyFogAtPos(gl_FragData[0], passViewPos, far);
 
-#if !defined(FORCE_OPAQUE) && @softParticles
+#ifndef FORCE_OPAQUE
+#if @softParticles
     gl_FragData[0].a *= calcSoftParticleFade(
         viewVec,
         passViewPos,
@@ -260,14 +263,17 @@ vec2 screenCoords = gl_FragCoord.xy / screenRes;
         softFalloffDepth
     );
 #endif
+#endif
 
-#if defined(FORCE_OPAQUE) && FORCE_OPAQUE
+#if FORCE_OPAQUE
     // having testing & blending isn't enough - we need to write an opaque pixel to be opaque
     gl_FragData[0].a = 1.0;
 #endif
 
-#if !defined(FORCE_OPAQUE) && !@disableNormals
+#ifndef FORCE_OPAQUE
+#if !@disableNormals
     gl_FragData[1].xyz = viewNormal * 0.5 + 0.5;
+#endif
 #endif
 
     applyShadowDebugOverlay();

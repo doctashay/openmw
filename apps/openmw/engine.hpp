@@ -185,6 +185,7 @@ namespace OMW
 
         Files::ConfigurationManager& mCfgMgr;
         int mGlMaxTextureImageUnits;
+        bool mOpenGL1Fallback;
 
         // not implemented
         Engine(const Engine&);

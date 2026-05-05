@@ -25,9 +25,12 @@
 #define OPENMW_COMPONENTS_BSA_BSAFILE_HPP
 
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <iosfwd>
+#include <istream>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include <components/files/conversion.hpp>
@@ -69,11 +72,9 @@ namespace Bsa
             uint32_t mFileSize = 0;
             uint32_t mOffset = 0;
             Hash mHash{};
-            uint32_t mNameOffset = 0;
-            uint32_t mNameSize = 0;
-            std::vector<char>* mNamesBuffer = nullptr;
+            std::string mName; // Store filename directly to avoid buffer invalidation issues
 
-            std::string_view name() const { return std::string_view(mNamesBuffer->data() + mNameOffset, mNameSize); }
+            std::string_view name() const { return std::string_view(mName); }
         };
         typedef std::vector<FileStruct> FileList;
 
@@ -147,6 +148,24 @@ namespace Bsa
         // checks version of BSA from file header
         static BsaVersion detectVersion(const std::filesystem::path& filePath);
     };
+    // Helper function for safe aligned reading on PowerPC
+    // PowerPC requires aligned memory access, so we read into a char buffer
+    // first, then memcpy to the aligned variable
+    template <typename T>
+    inline void readAligned(std::istream& in, T& value)
+    {
+        static_assert(std::is_arithmetic_v<T>);
+        alignas(T) char buffer[sizeof(T)];
+        std::memset(buffer, 0, sizeof(T)); // Initialize buffer to zero
+        in.read(buffer, sizeof(T));
+        if (in.fail() || in.gcount() != sizeof(T))
+        {
+            // Initialize to zero on failure to prevent using uninitialized data
+            value = T{};
+            return;
+        }
+        std::memcpy(&value, buffer, sizeof(T));
+    }
 }
 
 #endif

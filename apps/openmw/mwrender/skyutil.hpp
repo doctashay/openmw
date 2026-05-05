@@ -265,6 +265,7 @@ namespace MWRender
         void createSunGlare();
         void destroySunGlare();
 
+        bool mForceShaders;
         osg::ref_ptr<SunUpdater> mUpdater;
         osg::ref_ptr<osg::Node> mSunFlashNode;
         osg::ref_ptr<osg::Node> mSunGlareNode;

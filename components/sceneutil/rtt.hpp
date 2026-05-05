@@ -52,6 +52,8 @@ namespace SceneUtil
             int renderOrderNum, StereoAwareness stereoAwareness, bool addMSAAIntermediateTarget);
         ~RTTNode();
 
+        static void setMaxDimension(uint32_t max);
+
         osg::Texture* getColorTexture(osgUtil::CullVisitor* cv);
 
         osg::Texture* getDepthTexture(osgUtil::CullVisitor* cv);

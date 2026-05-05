@@ -313,7 +313,6 @@ add_component_dir (debug
     debugging debuglog gldebug debugdraw writeflags
     )
 
-add_definitions(-DMYGUI_DONT_USE_OBSOLETE=ON)
 IF(NOT WIN32 AND NOT APPLE)
     add_definitions(-DGLOBAL_DATA_PATH="${GLOBAL_DATA_PATH}")
     add_definitions(-DGLOBAL_CONFIG_PATH="${GLOBAL_CONFIG_PATH}")
@@ -565,7 +564,47 @@ endif()
 
 include_directories(${BULLET_INCLUDE_DIRS} ${CMAKE_CURRENT_BINARY_DIR})
 
-find_package(SQLite3 REQUIRED)
+if(OPENMW_USE_SYSTEM_SQLITE3)
+    find_package(SQLite3 QUIET)
+    if(NOT SQLite3_FOUND)
+        message(STATUS "System SQLite3 not found, will build internally")
+        set(OPENMW_USE_SYSTEM_SQLITE3 OFF)
+    endif()
+endif()
+if(NOT OPENMW_USE_SYSTEM_SQLITE3)
+    # SQLite3 will be built internally via extern/CMakeLists.txt
+    # The extern/CMakeLists.txt sets SQLite3_INCLUDE_DIR and SQLite3_LIBRARY
+    # So we don't need to find it here
+else()
+    find_package(SQLite3 REQUIRED)
+endif()
+
+# PowerPC may need libatomic for 64-bit atomic operations
+# Check before creating library so we can add fallback source if needed
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "ppc|powerpc" OR CMAKE_OSX_ARCHITECTURES MATCHES "ppc")
+    # Try multiple possible names/locations for libatomic
+    find_library(ATOMIC_LIB 
+        NAMES atomic libatomic
+        PATHS 
+            /opt/local/lib
+            /usr/local/lib
+            /usr/lib
+            ${CMAKE_C_COMPILER}/../lib
+            ${CMAKE_C_COMPILER}/../lib/gcc/${CMAKE_C_COMPILER_TARGET}/*/
+    )
+    
+    if(ATOMIC_LIB)
+        # Store for use by executables
+        set(OPENMW_ATOMIC_LIB ${ATOMIC_LIB} CACHE INTERNAL "libatomic library for PowerPC")
+        message(STATUS "Found libatomic for PowerPC atomic operations: ${ATOMIC_LIB}")
+    else()
+        # libatomic not found - use mutex-based fallback
+        message(STATUS "libatomic not found - using mutex-based fallback for atomic operations")
+        message(STATUS "Note: This is slower but ensures correctness on PowerPC")
+        # Add the fallback implementation to components
+        list(APPEND COMPONENT_FILES "${OpenMW_SOURCE_DIR}/components/misc/atomic_fallback.cpp")
+    endif()
+endif()
 
 add_library(components STATIC ${COMPONENT_FILES})
 
@@ -615,6 +654,12 @@ target_link_libraries(components
     ZLIB::ZLIB
     )
 
+# Link libatomic if found (fallback was already added to COMPONENT_FILES if not found)
+if(OPENMW_ATOMIC_LIB)
+    target_link_libraries(components ${OPENMW_ATOMIC_LIB})
+    message(STATUS "Linking libatomic for PowerPC atomic operations: ${OPENMW_ATOMIC_LIB}")
+endif()
+
 if(yaml-cpp_VERSION VERSION_GREATER_EQUAL 0.8.0)
     target_link_libraries(components yaml-cpp::yaml-cpp)
 else()
@@ -625,7 +670,12 @@ target_link_libraries(components ${BULLET_LIBRARIES})
 
 if (USE_QT)
     add_library(components_qt STATIC ${COMPONENT_QT_FILES})
-    target_link_libraries(components_qt components Qt::Widgets Qt::Core)
+    if(USE_QT4)
+        target_link_libraries(components_qt components ${QT_QTCORE_LIBRARY} ${QT_QTGUI_LIBRARY})
+        target_include_directories(components_qt PUBLIC ${QT_INCLUDE_DIR})
+    else()
+        target_link_libraries(components_qt components Qt::Widgets Qt::Core)
+    endif()
 
     if (BUILD_LAUNCHER OR BUILD_WIZARD)
         add_dependencies(components_qt qm-files)
@@ -643,6 +693,16 @@ if (OSG_STATIC AND CMAKE_SYSTEM_NAME MATCHES "Linux")
     find_package(Fontconfig MODULE)
     if(Fontconfig_FOUND)
         target_link_libraries(components Fontconfig::Fontconfig)
+    endif()
+endif()
+
+if (APPLE)
+    target_link_libraries(components "-framework CoreFoundation" "-framework CoreServices")
+    if (OSG_STATIC)
+        find_package(Fontconfig MODULE)
+        if(Fontconfig_FOUND)
+            target_link_libraries(components Fontconfig::Fontconfig)
+        endif()
     endif()
 endif()
 
@@ -664,7 +724,10 @@ endif()
 # Make the variable accessible for other subdirectories
 set(COMPONENT_FILES ${COMPONENT_FILES} PARENT_SCOPE)
 
-target_compile_definitions(components PUBLIC BT_USE_DOUBLE_PRECISION)
+target_compile_definitions(components PUBLIC
+    BT_USE_DOUBLE_PRECISION
+    MYGUI_DONT_USE_OBSOLETE=ON
+)
 target_compile_definitions(components PRIVATE OPENMW_DOC_BASEURL="${OPENMW_DOC_BASEURL}")
 
 if(OSG_STATIC)
@@ -675,9 +738,21 @@ if(OSG_STATIC)
         if(OPENMW_USE_SYSTEM_OSG)
             list(APPEND _osg_plugins_static_files ${${_plugin_uc}_LIBRARY})
         else()
-            list(APPEND _osg_plugins_static_files $<TARGET_FILE:${${_plugin_uc}_LIBRARY}>)
-            target_link_libraries(components_osg_plugins INTERFACE $<TARGET_PROPERTY:${${_plugin_uc}_LIBRARY},LINK_LIBRARIES>)
-            add_dependencies(components_osg_plugins ${${_plugin_uc}_LIBRARY})
+            # For internal OSG build, check if the plugin target exists
+            # Some plugins may not be built if dependencies are missing (e.g., collada_dom for osgdb_dae, PNG/JPEG for osgdb_png)
+            set(_plugin_target ${${_plugin_uc}_LIBRARY})
+            if(TARGET ${_plugin_target})
+                list(APPEND _osg_plugins_static_files $<TARGET_FILE:${_plugin_target}>)
+                # Get LINK_LIBRARIES property if it exists, otherwise use empty list
+                get_target_property(_plugin_link_libs ${_plugin_target} LINK_LIBRARIES)
+                if(_plugin_link_libs)
+                    target_link_libraries(components_osg_plugins INTERFACE ${_plugin_link_libs})
+                endif()
+                add_dependencies(components_osg_plugins ${_plugin_target})
+            else()
+                message(WARNING "OSG plugin ${_plugin} (target ${_plugin_target}) not found - plugin may be disabled due to missing dependencies")
+                message(WARNING "  Install missing dependencies via MacPorts (e.g., collada_dom for osgdb_dae, libpng/jpeg for osgdb_png)")
+            endif()
         endif()
     endforeach()
     # We use --whole-archive because OSG plugins use registration.

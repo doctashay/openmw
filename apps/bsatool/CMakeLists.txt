@@ -13,6 +13,11 @@ target_link_libraries(bsatool
     components
 )
 
+# PowerPC needs libatomic for atomic operations
+if(OPENMW_ATOMIC_LIB)
+    target_link_libraries(bsatool ${OPENMW_ATOMIC_LIB})
+endif()
+
 if (WIN32)
     target_sources(bsatool PRIVATE ${CMAKE_SOURCE_DIR}/files/windows/other-apps.manifest)
 endif()

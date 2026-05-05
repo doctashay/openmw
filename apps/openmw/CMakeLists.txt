@@ -15,6 +15,11 @@ set(OPENMW_HEADERS
     profile.hpp
 )
 
+if (APPLE)
+    list(APPEND OPENMW_SOURCES glwarningdialog.mm)
+    list(APPEND OPENMW_HEADERS glwarningdialog.hpp)
+endif()
+
 source_group(apps/openmw FILES main.cpp androidmain.cpp ${OPENMW_SOURCES} ${OPENMW_HEADERS} ${OPENMW_RESOURCES})
 
 add_openmw_dir (mwrender
@@ -58,17 +63,44 @@ add_openmw_dir (mwscript
     animationextensions transformationextensions consoleextensions userextensions
     )
 
-add_openmw_dir (mwlua
-    luamanagerimp object objectlists userdataserializer luaevents engineevents objectvariant
-    context menuscripts globalscripts localscripts playerscripts luabindings objectbindings cellbindings coremwscriptbindings
-    mwscriptbindings camerabindings vfsbindings uibindings soundbindings inputbindings nearbybindings dialoguebindings
-    postprocessingbindings stats recordstore debugbindings corebindings worldbindings worker landbindings magicbindings factionbindings
-    classbindings itemdata inputprocessor animationbindings birthsignbindings racebindings markupbindings weatherbindings regionbindings
-    types/types types/door types/item types/actor types/container types/lockable types/weapon types/npc
-    types/creature types/player types/activator types/book types/lockpick types/probe types/apparatus
-    types/potion types/ingredient types/misc types/repair types/armor types/light types/static
-    types/clothing types/levelledlist types/terminal
-    )
+if (OPENMW_UNITY_BUILD AND (OPENMW_MACOSX_10_5 OR OPENMW_POWERPC_BUILD))
+    set (mwlua_files)
+    set (mwlua_cppfiles)
+    foreach (u
+        luamanagerimp object objectlists userdataserializer luaevents engineevents objectvariant
+        context menuscripts globalscripts localscripts playerscripts luabindings objectbindings cellbindings coremwscriptbindings
+        mwscriptbindings camerabindings vfsbindings uibindings soundbindings inputbindings nearbybindings dialoguebindings
+        postprocessingbindings stats recordstore debugbindings corebindings worldbindings worker landbindings magicbindings factionbindings
+        classbindings itemdata inputprocessor animationbindings birthsignbindings racebindings markupbindings weatherbindings regionbindings
+        types/types types/door types/item types/actor types/container types/lockable types/weapon types/npc
+        types/creature types/player types/activator types/book types/lockpick types/probe types/apparatus
+        types/potion types/ingredient types/misc types/repair types/armor types/light types/static
+        types/clothing types/levelledlist types/terminal)
+        file (GLOB ALL "mwlua/${u}.[ch]pp")
+        foreach (f ${ALL})
+            list (APPEND mwlua_files "${f}")
+            list (APPEND OPENMW_FILES "${f}")
+        endforeach (f)
+        file (GLOB ALL "mwlua/${u}.cpp")
+        foreach (f ${ALL})
+            list (APPEND mwlua_cppfiles "${f}")
+            list (APPEND OPENMW_FILES "${f}")
+        endforeach (f)
+    endforeach (u)
+    source_group ("apps\\openmw\\mwlua" FILES ${mwlua_files})
+else()
+    add_openmw_dir (mwlua
+        luamanagerimp object objectlists userdataserializer luaevents engineevents objectvariant
+        context menuscripts globalscripts localscripts playerscripts luabindings objectbindings cellbindings coremwscriptbindings
+        mwscriptbindings camerabindings vfsbindings uibindings soundbindings inputbindings nearbybindings dialoguebindings
+        postprocessingbindings stats recordstore debugbindings corebindings worldbindings worker landbindings magicbindings factionbindings
+        classbindings itemdata inputprocessor animationbindings birthsignbindings racebindings markupbindings weatherbindings regionbindings
+        types/types types/door types/item types/actor types/container types/lockable types/weapon types/npc
+        types/creature types/player types/activator types/book types/lockpick types/probe types/apparatus
+        types/potion types/ingredient types/misc types/repair types/armor types/light types/static
+        types/clothing types/levelledlist types/terminal
+        )
+endif()
 
 add_openmw_dir (mwsound
     soundmanagerimp openaloutput ffmpegdecoder sound soundbuffer sounddecoder soundoutput
@@ -150,7 +182,12 @@ if(BUILD_OPENMW)
         )
     endif()
 
-    target_link_libraries(openmw openmw-lib)
+    # Force-link components so static registration code survives library dead stripping.
+    add_library(components_whole_archive INTERFACE)
+    get_whole_archive_options(COMPONENTS_WHOLE_ARCHIVE_OPTS $<TARGET_FILE:components>)
+    target_link_options(components_whole_archive INTERFACE ${COMPONENTS_WHOLE_ARCHIVE_OPTS})
+    target_link_libraries(components_whole_archive INTERFACE components)
+    target_link_libraries(openmw openmw-lib components_whole_archive)
 
     # Workaround necessary to ensure osgAnimation::MatrixLinearSampler dynamic casts work under Clang
     # NOTE: it's unclear whether the broken behavior is spec-compliant
@@ -214,8 +251,6 @@ if (MSVC AND PRECOMPILE_HEADERS_WITH_MSVC)
     )
 endif()
 
-add_definitions(-DMYGUI_DONT_USE_OBSOLETE=ON)
-
 if (ANDROID)
     target_link_libraries(openmw-lib EGL android log z)
 endif (ANDROID)
@@ -243,21 +278,40 @@ if(APPLE AND BUILD_OPENMW)
     configure_file("${OpenMW_BINARY_DIR}/defaults.bin" ${BUNDLE_RESOURCES_DIR} COPYONLY)
     configure_file("${OpenMW_BINARY_DIR}/openmw.cfg" ${BUNDLE_RESOURCES_DIR} COPYONLY)
     configure_file("${OpenMW_BINARY_DIR}/gamecontrollerdb.txt" ${BUNDLE_RESOURCES_DIR} COPYONLY)
+    configure_file("${OpenMW_SOURCE_DIR}/scripts/openmw_folder_wizard.py" "${BUNDLE_RESOURCES_DIR}/openmw_folder_wizard.py" COPYONLY)
+    configure_file("${OpenMW_SOURCE_DIR}/files/mac/openmw-folder-wizard.command"
+        "${BUNDLE_RESOURCES_DIR}/OpenMW Folder Wizard.command" COPYONLY)
+    configure_file("${OpenMW_SOURCE_DIR}/files/mac/First Time Setup.applescript"
+        "${BUNDLE_RESOURCES_DIR}/First Time Setup.applescript" COPYONLY)
 
     add_custom_command(TARGET openmw
         POST_BUILD
-        COMMAND cp "${OpenMW_BINARY_DIR}/resources/version" "${BUNDLE_RESOURCES_DIR}/resources")
+        COMMAND cp "${OpenMW_BINARY_DIR}/resources/version" "${BUNDLE_RESOURCES_DIR}/resources"
+        COMMAND cp "${OpenMW_SOURCE_DIR}/files/mac/First Time Setup.command" "${APP_BUNDLE_DIR}/../First Time Setup.command"
+        COMMAND chmod +x "${APP_BUNDLE_DIR}/../First Time Setup.command")
 
     find_library(COCOA_FRAMEWORK Cocoa)
     find_library(IOKIT_FRAMEWORK IOKit)
     target_link_libraries(openmw ${COCOA_FRAMEWORK} ${IOKIT_FRAMEWORK})
 
     if (FFmpeg_FOUND)
-        target_link_options(openmw PRIVATE "LINKER:SHELL:-framework CoreVideo"
-                                           "LINKER:SHELL:-framework CoreMedia"
-                                           "LINKER:SHELL:-framework VideoToolbox"
-                                           "LINKER:SHELL:-framework AudioToolbox"
-                                           "LINKER:SHELL:-framework VideoDecodeAcceleration")
+        if (CMAKE_OSX_DEPLOYMENT_TARGET)
+            if (CMAKE_OSX_DEPLOYMENT_TARGET VERSION_GREATER_EQUAL "10.7")
+                target_link_options(openmw PRIVATE "LINKER:SHELL:-framework CoreVideo"
+                                                   "LINKER:SHELL:-framework CoreMedia"
+                                                   "LINKER:SHELL:-framework VideoToolbox"
+                                                   "LINKER:SHELL:-framework AudioToolbox"
+                                                   "LINKER:SHELL:-framework VideoDecodeAcceleration")
+            endif()
+        else()
+            message(STATUS "Skipping CoreMedia/CoreVideo/VideoToolbox frameworks (not available on macOS 10.5)")
+        endif()
+    endif()
+
+    if (OPENMW_MACOSX_10_5 OR OPENMW_POWERPC_BUILD)
+        set_target_properties(openmw PROPERTIES OSX_ARCHITECTURES "ppc")
+        set_target_properties(openmw PROPERTIES BUILD_RPATH "/opt/local/lib")
+        message(STATUS "Adding BUILD_RPATH /opt/local/lib for Mesa libgallium")
     endif()
 endif()
 

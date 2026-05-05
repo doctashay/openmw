@@ -1,6 +1,7 @@
 #ifndef OPENMW_COMPONENTS_RESOURCE_MANAGER_H
 #define OPENMW_COMPONENTS_RESOURCE_MANAGER_H
 
+#include <cstddef>
 #include <osg/ref_ptr>
 
 #include <components/vfs/pathutil.hpp>
@@ -28,6 +29,7 @@ namespace Resource
         virtual void updateCache(double referenceTime) = 0;
         virtual void clearCache() = 0;
         virtual void setExpiryDelay(double expiryDelay) = 0;
+        virtual void setMaxCacheSize(std::size_t maxSize) {}
         virtual void reportStats(unsigned int frameNumber, osg::Stats* stats) const = 0;
         virtual void releaseGLObjects(osg::State* state) = 0;
     };
@@ -59,6 +61,8 @@ namespace Resource
         /// How long to keep objects in cache after no longer being referenced.
         void setExpiryDelay(double expiryDelay) final { mExpiryDelay = expiryDelay; }
         double getExpiryDelay() const { return mExpiryDelay; }
+
+        void setMaxCacheSize(std::size_t maxSize) override { mCache->setMaxSize(maxSize); }
 
         const VFS::Manager* getVFS() const { return mVFS; }
 

@@ -1,0 +1,12 @@
+# Optional extern submodules for local OSG/MyGUI builds.
+# If these trees are absent, CMake falls back to FetchContent.
+
+[submodule "extern/osg"]
+	path = extern/osg
+	url = https://github.com/openscenegraph/OpenSceneGraph.git
+	branch = OpenSceneGraph-3.6
+
+[submodule "extern/mygui"]
+	path = extern/mygui
+	url = https://github.com/MyGUI/mygui.git
+	branch = MyGUI3.4.3

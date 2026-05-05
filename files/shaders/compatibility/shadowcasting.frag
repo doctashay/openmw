@@ -1,4 +1,4 @@
-#version 120
+#version 110
 
 #if @useGPUShader4
     #extension GL_EXT_gpu_shader4: require

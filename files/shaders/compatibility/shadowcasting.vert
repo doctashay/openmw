@@ -1,4 +1,4 @@
-#version 120
+#version 110
 
 varying vec2 diffuseMapUV;
 
@@ -6,8 +6,8 @@ varying float alphaPassthrough;
 
 uniform int colorMode;
 uniform bool useTreeAnim;
-uniform bool useDiffuseMapForShadowAlpha = true;
-uniform bool alphaTestShadows = true;
+uniform bool useDiffuseMapForShadowAlpha;
+uniform bool alphaTestShadows;
 
 void main(void)
 {

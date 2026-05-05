@@ -27,6 +27,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cerrno>
+#include <cstring>
 #include <format>
 #include <istream>
 #include <system_error>
@@ -37,6 +38,7 @@
 #include <components/files/constrainedfilestream.hpp>
 #include <components/files/conversion.hpp>
 #include <components/files/utils.hpp>
+#include <components/misc/endianness.hpp>
 #include <components/misc/pathhelpers.hpp>
 #include <components/vfs/pathutil.hpp>
 
@@ -54,7 +56,27 @@ namespace Bsa
         if (fsize < 36) // Header is 36 bytes
             fail("File too small to be a valid BSA archive");
 
-        input.read(reinterpret_cast<char*>(&mHeader), sizeof(mHeader));
+        // Read header into buffer first, then convert endianness for numeric fields
+        alignas(Header) char headerBuffer[sizeof(Header)];
+        input.read(headerBuffer, sizeof(Header));
+        if (input.fail() || input.gcount() != sizeof(Header))
+            fail("Failed to read compressed BSA header");
+        
+        std::memcpy(&mHeader, headerBuffer, sizeof(Header));
+        
+        // Compressed BSA files are little-endian, convert on big-endian systems
+        if constexpr (Misc::IS_BIG_ENDIAN)
+        {
+            mHeader.mFormat = Misc::fromLittleEndian(mHeader.mFormat);
+            mHeader.mVersion = Misc::fromLittleEndian(mHeader.mVersion);
+            mHeader.mFoldersOffset = Misc::fromLittleEndian(mHeader.mFoldersOffset);
+            mHeader.mFlags = Misc::fromLittleEndian(mHeader.mFlags);
+            mHeader.mFolderCount = Misc::fromLittleEndian(mHeader.mFolderCount);
+            mHeader.mFileCount = Misc::fromLittleEndian(mHeader.mFileCount);
+            mHeader.mFolderNamesLength = Misc::fromLittleEndian(mHeader.mFolderNamesLength);
+            mHeader.mFileNamesLength = Misc::fromLittleEndian(mHeader.mFileNamesLength);
+            mHeader.mFileFlags = Misc::fromLittleEndian(mHeader.mFileFlags);
+        }
 
         if (mHeader.mFormat != static_cast<std::uint32_t>(BsaVersion::Compressed)) // BSA
             fail("Unrecognized compressed BSA format");
@@ -83,17 +105,49 @@ namespace Bsa
         {
             FlatFolderRecord folder;
 
-            input.read(reinterpret_cast<char*>(&folder.mHash), 8);
-            input.read(reinterpret_cast<char*>(&folder.mCount), 4);
+            // Read folder record fields
+            alignas(std::uint64_t) char hashBuffer[8];
+            alignas(std::uint32_t) char countBuffer[4];
+            input.read(hashBuffer, 8);
+            input.read(countBuffer, 4);
+            
+            std::memcpy(&folder.mHash, hashBuffer, 8);
+            std::memcpy(&folder.mCount, countBuffer, 4);
+            
+            // Compressed BSA files are little-endian, convert on big-endian systems
+            if constexpr (Misc::IS_BIG_ENDIAN)
+            {
+                folder.mHash = Misc::fromLittleEndian(folder.mHash);
+                folder.mCount = Misc::fromLittleEndian(folder.mCount);
+            }
+            
             if (mHeader.mVersion == Version_SSE) // SSE
             {
                 std::uint32_t unknown = 0;
-                input.read(reinterpret_cast<char*>(&unknown), 4);
-                input.read(reinterpret_cast<char*>(&folder.mOffset), 8);
+                alignas(std::uint32_t) char unknownBuffer[4];
+                alignas(std::int64_t) char offsetBuffer[8];
+                input.read(unknownBuffer, 4);
+                input.read(offsetBuffer, 8);
+                std::memcpy(&unknown, unknownBuffer, 4);
+                std::memcpy(&folder.mOffset, offsetBuffer, 8);
+                
+                if constexpr (Misc::IS_BIG_ENDIAN)
+                {
+                    folder.mOffset = Misc::fromLittleEndian(folder.mOffset);
+                }
             }
             else
             {
-                input.read(reinterpret_cast<char*>(&folder.mOffset), 4);
+                alignas(std::int32_t) char offsetBuffer[4];
+                input.read(offsetBuffer, 4);
+                std::int32_t offset32;
+                std::memcpy(&offset32, offsetBuffer, 4);
+                
+                if constexpr (Misc::IS_BIG_ENDIAN)
+                {
+                    offset32 = Misc::fromLittleEndian(offset32);
+                }
+                folder.mOffset = static_cast<std::int64_t>(offset32);
             }
 
             if (input.fail())
@@ -134,9 +188,25 @@ namespace Bsa
             {
                 FileRecord file;
 
-                input.read(reinterpret_cast<char*>(&file.mHash), 8);
-                input.read(reinterpret_cast<char*>(&file.mSize), 4);
-                input.read(reinterpret_cast<char*>(&file.mOffset), 4);
+                // Read file record fields
+                alignas(std::uint64_t) char hashBuffer[8];
+                alignas(std::uint32_t) char sizeBuffer[4];
+                alignas(std::uint32_t) char offsetBuffer[4];
+                input.read(hashBuffer, 8);
+                input.read(sizeBuffer, 4);
+                input.read(offsetBuffer, 4);
+                
+                std::memcpy(&file.mHash, hashBuffer, 8);
+                std::memcpy(&file.mSize, sizeBuffer, 4);
+                std::memcpy(&file.mOffset, offsetBuffer, 4);
+                
+                // Compressed BSA files are little-endian, convert on big-endian systems
+                if constexpr (Misc::IS_BIG_ENDIAN)
+                {
+                    file.mHash = Misc::fromLittleEndian(file.mHash);
+                    file.mSize = Misc::fromLittleEndian(file.mSize);
+                    file.mOffset = Misc::fromLittleEndian(file.mOffset);
+                }
 
                 if (input.fail())
                     fail(std::format("Failed to read compressed BSA folder file record: {}",

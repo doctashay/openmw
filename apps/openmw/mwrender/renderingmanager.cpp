@@ -333,6 +333,10 @@ namespace MWRender
         // Figure out which pipeline must be used by default and inform the user
         bool forceShaders = Settings::shaders().mForceShaders;
         {
+#if defined(OPENMW_MACOSX_10_5)
+            forceShaders = false;
+            Log(Debug::Info) << "OPENMW_MACOSX_10_5: forcing fixed-function rendering";
+#else
             std::vector<std::string> requesters;
             if (!forceShaders)
             {
@@ -376,6 +380,7 @@ namespace MWRender
             {
                 Log(Debug::Info) << "Using fixed-function rendering by default";
             }
+#endif
         }
 
         resourceSystem->getSceneManager()->setForceShaders(forceShaders);
@@ -553,9 +558,10 @@ namespace MWRender
 
         mFog = std::make_unique<FogManager>();
 
+        bool enableSkyRTT = mSkyBlending;
         mSky = std::make_unique<SkyManager>(
-            sceneRoot, mRootNode, mViewer->getCamera(), resourceSystem->getSceneManager(), mSkyBlending);
-        if (mSkyBlending)
+            sceneRoot, mRootNode, mViewer->getCamera(), resourceSystem->getSceneManager(), enableSkyRTT);
+        if (enableSkyRTT)
         {
             int skyTextureUnit = mResourceSystem->getSceneManager()->getShaderManager().reserveGlobalTextureUnits(
                 Shader::ShaderManager::Slot::SkyTexture);
@@ -786,7 +792,8 @@ namespace MWRender
     void RenderingManager::removeCell(const MWWorld::CellStore* store)
     {
         mPathgrid->removeCell(store);
-        mActorsPaths->removeCell(store);
+        if (mActorsPaths)
+            mActorsPaths->removeCell(store);
         mObjects->removeCell(store);
 
         if (store->getCell()->isExterior())
@@ -819,11 +826,15 @@ namespace MWRender
     void RenderingManager::setSkyEnabled(bool enabled)
     {
         mSky->setEnabled(enabled);
-        if (enabled)
-            mShadowManager->enableOutdoorMode();
-        else
-            mShadowManager->enableIndoorMode(Settings::shadows());
-        mPostProcessor->getStateUpdater()->setIsInterior(!enabled);
+        if (mShadowManager)
+        {
+            if (enabled)
+                mShadowManager->enableOutdoorMode();
+            else
+                mShadowManager->enableIndoorMode(Settings::shadows());
+        }
+        if (mPostProcessor)
+            mPostProcessor->getStateUpdater()->setIsInterior(!enabled);
     }
 
     bool RenderingManager::toggleBorders()
@@ -862,15 +873,15 @@ namespace MWRender
         }
         else if (mode == Render_NavMesh)
         {
-            return mNavMesh->toggle();
+            return mNavMesh && mNavMesh->toggle();
         }
         else if (mode == Render_ActorsPaths)
         {
-            return mActorsPaths->toggle();
+            return mActorsPaths && mActorsPaths->toggle();
         }
         else if (mode == Render_RecastMesh)
         {
-            return mRecastMesh->toggle();
+            return mRecastMesh && mRecastMesh->toggle();
         }
         return false;
     }
@@ -1246,7 +1257,8 @@ namespace MWRender
     void RenderingManager::updatePtr(const MWWorld::Ptr& old, const MWWorld::Ptr& updated)
     {
         mObjects->updatePtr(old, updated);
-        mActorsPaths->updatePtr(old, updated);
+        if (mActorsPaths)
+            mActorsPaths->updatePtr(old, updated);
     }
 
     void RenderingManager::spawnEffect(VFS::Path::NormalizedView model, std::string_view texture,
@@ -1734,12 +1746,14 @@ namespace MWRender
     void RenderingManager::updateActorPath(const MWWorld::ConstPtr& actor, const std::deque<osg::Vec3f>& path,
         const DetourNavigator::AgentBounds& agentBounds, const osg::Vec3f& start, const osg::Vec3f& end) const
     {
-        mActorsPaths->update(actor, path, agentBounds, start, end, mNavigator.getSettings());
+        if (mActorsPaths)
+            mActorsPaths->update(actor, path, agentBounds, start, end, mNavigator.getSettings());
     }
 
     void RenderingManager::removeActorPath(const MWWorld::ConstPtr& actor) const
     {
-        mActorsPaths->remove(actor);
+        if (mActorsPaths)
+            mActorsPaths->remove(actor);
     }
 
     void RenderingManager::setNavMeshNumber(const std::size_t value)
@@ -1749,7 +1763,7 @@ namespace MWRender
 
     void RenderingManager::updateNavMesh()
     {
-        if (!mNavMesh->isEnabled())
+        if (!mNavMesh || !mNavMesh->isEnabled())
             return;
 
         const auto navMeshes = mNavigator.getNavMeshes();
@@ -1776,7 +1790,7 @@ namespace MWRender
 
     void RenderingManager::updateRecastMesh()
     {
-        if (!mRecastMesh->isEnabled())
+        if (!mRecastMesh || !mRecastMesh->isEnabled())
             return;
 
         mRecastMesh->update(mNavigator.getRecastMeshTiles(), mNavigator.getSettings());

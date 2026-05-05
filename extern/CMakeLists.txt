@@ -4,6 +4,9 @@ set_directory_properties(PROPERTIES EXCLUDE_FROM_ALL on)
 set(CMAKE_CXX_CLANG_TIDY "")
 
 if(NOT OPENMW_USE_SYSTEM_BULLET)
+    if(OPENMW_MACOSX_10_5)
+        message(STATUS "Building Bullet Physics internally - this should work on macOS 10.5 PowerPC")
+    endif()
 
     set(BUILD_BULLET3 OFF CACHE BOOL "")
     set(BUILD_EXTRAS OFF CACHE BOOL "")
@@ -47,34 +50,29 @@ if(NOT OPENMW_USE_SYSTEM_BULLET)
     set(BULLET_LIBRARIES BulletCollision LinearMath PARENT_SCOPE)
 endif()
 
-if(NOT OPENMW_USE_SYSTEM_MYGUI)
-
-    set(MYGUI_RENDERSYSTEM 4 CACHE STRING "")
-    set(MYGUI_DISABLE_PLUGINS TRUE CACHE BOOL "")
-    set(MYGUI_BUILD_DEMOS OFF CACHE BOOL "")
-    set(MYGUI_BUILD_PLUGINS OFF CACHE BOOL "")
-    set(MYGUI_BUILD_TOOLS OFF CACHE BOOL "")
-    set(MYGUI_DONT_USE_OBSOLETE ON CACHE BOOL "")
-
-    if(MYGUI_STATIC)
-        set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-    else()
-        set(BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
-    endif()
-
-    include(FetchContent)
-    FetchContent_Declare(mygui
-        URL https://github.com/MyGUI/mygui/archive/refs/tags/MyGUI3.4.3.zip
-        URL_HASH SHA512=c804ef665e786076582367f171082cd2181fdbd214300ddcca4a4245c5a0f45e62e72778ee2d96ec46b393e22477dd729f9bb3006e6eecbf536674e34a057721
-        SOURCE_DIR fetched/mygui
-    )
-    FetchContent_MakeAvailable(mygui)
-
-    set(MyGUI_INCLUDE_DIRS ${mygui_SOURCE_DIR}/MyGUIEngine/include PARENT_SCOPE)
-    set(MyGUI_LIBRARIES MyGUIEngine PARENT_SCOPE)
-endif()
-
 if(NOT OPENMW_USE_SYSTEM_OSG)
+    # OSG internal build requires several dependencies for plugins
+    if(OPENMW_MACOSX_10_5)
+        message(STATUS "Building OSG internally - this requires freetype, jpeg, and png libraries")
+        message(STATUS "Install via MacPorts: sudo port install freetype jpeg libpng")
+        # Check for required dependencies
+        find_package(Freetype QUIET)
+        find_package(JPEG QUIET)
+        find_package(PNG QUIET)
+        if(NOT Freetype_FOUND OR NOT JPEG_FOUND OR NOT PNG_FOUND)
+            message(WARNING "Some OSG plugin dependencies not found:")
+            if(NOT Freetype_FOUND)
+                message(WARNING "  - Freetype not found (required for osgdb_freetype)")
+            endif()
+            if(NOT JPEG_FOUND)
+                message(WARNING "  - JPEG not found (required for osgdb_jpeg)")
+            endif()
+            if(NOT PNG_FOUND)
+                message(WARNING "  - PNG not found (required for osgdb_png)")
+            endif()
+            message(WARNING "OSG build may fail or plugins may be disabled. Install missing dependencies via MacPorts.")
+        endif()
+    endif()
 
     set(BUILD_OSG_APPLICATIONS OFF CACHE BOOL "")
     set(BUILD_OSG_DEPRECATED_SERIALIZERS OFF CACHE BOOL "")
@@ -91,13 +89,26 @@ if(NOT OPENMW_USE_SYSTEM_OSG)
     set(BUILD_OSG_PLUGIN_PNG ON CACHE BOOL "")
     set(BUILD_OSG_PLUGIN_TGA ON CACHE BOOL "")
 
-    set(OSG_USE_FLOAT_MATRIX OFF CACHE BOOL "")
-    set(OSG_USE_FLOAT_PLANE OFF CACHE BOOL "")
-    set(OSG_USE_FLOAT_QUAT OFF CACHE BOOL "")
+    if(OPENMW_MACOSX_10_5 OR OPENMW_POWERPC_BUILD)
+        set(OSG_USE_FLOAT_MATRIX ON CACHE BOOL "" FORCE)
+        set(OSG_USE_FLOAT_PLANE OFF CACHE BOOL "" FORCE)
+        set(OSG_USE_FLOAT_QUAT ON CACHE BOOL "" FORCE)
+    else()
+        set(OSG_USE_FLOAT_MATRIX OFF CACHE BOOL "")
+        set(OSG_USE_FLOAT_PLANE OFF CACHE BOOL "")
+        set(OSG_USE_FLOAT_QUAT OFF CACHE BOOL "")
+    endif()
+
+    if(APPLE)
+        set(OSG_WINDOWING_SYSTEM "Cocoa" CACHE STRING "Windowing backend used by OpenSceneGraph")
+    endif()
 
     set(OPENGL_PROFILE "GL2" CACHE STRING "")
 
-    if(OSG_STATIC)
+    if(OSG_STATIC OR OPENMW_OSG_SINGLE_THREADED)
+        if(OPENMW_OSG_SINGLE_THREADED)
+            message(STATUS "Building OpenSceneGraph single-threaded (graphics thread disabled)")
+        endif()
         set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
         set(DYNAMIC_OPENTHREADS OFF CACHE BOOL "" FORCE)
         set(DYNAMIC_OPENSCENEGRAPH OFF CACHE BOOL "" FORCE)
@@ -127,15 +138,64 @@ if(NOT OPENMW_USE_SYSTEM_OSG)
         endif()
     endif()
 
-    # OSGoS branch 3.6
-    include(FetchContent)
-    FetchContent_Declare(osg
-        URL https://github.com/OpenMW/osg/archive/01cc2b585c8456a4ff843066b7e1a8715558289f.zip
-        URL_HASH SHA512=9b0a94c1c1d99c767f1857629d43c7a53bfcb74ef760993a121567831e168a1ebbfc10b0c67d7f2241c7b6c6dab2d0e6b876d9f17aca0fabe1a8c86b2279f956
-        SOURCE_DIR fetched/osg
-    )
-    FetchContent_MakeAvailable(osg)
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/osg/CMakeLists.txt)
+        message(STATUS "Using local OSG from extern/osg")
+        add_subdirectory(osg)
+        set(osg_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/osg)
+        set(osg_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/osg)
+    else()
+        include(FetchContent)
+        FetchContent_Declare(osg
+            URL https://github.com/OpenMW/osg/archive/01cc2b585c8456a4ff843066b7e1a8715558289f.zip
+            URL_HASH SHA512=9b0a94c1c1d99c767f1857629d43c7a53bfcb74ef760993a121567831e168a1ebbfc10b0c67d7f2241c7b6c6dab2d0e6b876d9f17aca0fabe1a8c86b2279f956
+            SOURCE_DIR fetched/osg
+        )
+        FetchContent_MakeAvailable(osg)
 
+        if(OPENMW_MACOSX_10_5)
+            set(OSG_PTHREAD_FILE "${osg_SOURCE_DIR}/src/OpenThreads/pthreads/PThread.cpp")
+            if(EXISTS "${OSG_PTHREAD_FILE}")
+                file(READ "${OSG_PTHREAD_FILE}" OSG_PTHREAD_CONTENT)
+                string(REPLACE
+                    "return (size_t)::syscall(SYS_thread_selfid);"
+                    "return reinterpret_cast<size_t>(pthread_self());"
+                    OSG_PTHREAD_CONTENT "${OSG_PTHREAD_CONTENT}")
+                file(WRITE "${OSG_PTHREAD_FILE}" "${OSG_PTHREAD_CONTENT}")
+                message(STATUS "Patched fetched OSG PThread.cpp for macOS 10.5 compatibility")
+            endif()
+
+            set(OSG_COCOA_FILE "${osg_SOURCE_DIR}/src/osgViewer/GraphicsWindowCocoa.mm")
+            if(EXISTS "${OSG_COCOA_FILE}")
+                file(READ "${OSG_COCOA_FILE}" OSG_COCOA_CONTENT)
+                string(REGEX REPLACE "<[ ]*NSApplicationDelegate[ ]*>" "" OSG_COCOA_CONTENT "${OSG_COCOA_CONTENT}")
+                string(REPLACE
+                    "[_view setWantsBestResolutionOpenGLSurface: NO];"
+                    "// [_view setWantsBestResolutionOpenGLSurface: NO]; // Not available on macOS 10.5"
+                    OSG_COCOA_CONTENT "${OSG_COCOA_CONTENT}")
+                string(REPLACE
+                    "[_view setWantsBestResolutionOpenGLSurface:NO];"
+                    "// [_view setWantsBestResolutionOpenGLSurface:NO]; // Not available on macOS 10.5"
+                    OSG_COCOA_CONTENT "${OSG_COCOA_CONTENT}")
+                file(WRITE "${OSG_COCOA_FILE}" "${OSG_COCOA_CONTENT}")
+                message(STATUS "Patched fetched OSG GraphicsWindowCocoa.mm for macOS 10.5 compatibility")
+            endif()
+
+            set(OSG_DARWIN_FILE "${osg_SOURCE_DIR}/src/osgViewer/DarwinUtils.mm")
+            if(EXISTS "${OSG_DARWIN_FILE}")
+                file(READ "${OSG_DARWIN_FILE}" OSG_DARWIN_CONTENT)
+                string(REPLACE
+                    "CFArrayRef availableModes = CGDisplayCopyAllDisplayModes (displayid, NULL);"
+                    "#if MAC_OS_X_VERSION_MIN_REQUIRED >= 1060\n        CFArrayRef availableModes = CGDisplayCopyAllDisplayModes (displayid, NULL);\n#else\n        return false;\n#endif"
+                    OSG_DARWIN_CONTENT "${OSG_DARWIN_CONTENT}")
+                string(REPLACE
+                    "CGDisplayModeRef best_match(NULL);"
+                    "#if MAC_OS_X_VERSION_MIN_REQUIRED >= 1060\n        CGDisplayModeRef best_match(NULL);\n#else\n        // Already returned above for 10.5\n#endif"
+                    OSG_DARWIN_CONTENT "${OSG_DARWIN_CONTENT}")
+                file(WRITE "${OSG_DARWIN_FILE}" "${OSG_DARWIN_CONTENT}")
+                message(STATUS "Patched fetched OSG DarwinUtils.mm for macOS 10.5 compatibility")
+            endif()
+        endif()
+    endif()
     set(OPENSCENEGRAPH_INCLUDE_DIRS ${osg_SOURCE_DIR}/include ${osg_BINARY_DIR}/include PARENT_SCOPE)
     set(OSG_LIBRARIES OpenThreads osg PARENT_SCOPE)
     foreach(_name ${USED_OSG_COMPONENTS})
@@ -146,6 +206,48 @@ if(NOT OPENMW_USE_SYSTEM_OSG)
         string(TOUPPER ${_name} _name_uc)
         set(${_name_uc}_LIBRARY ${_name} PARENT_SCOPE)
     endforeach()
+endif()
+
+if(NOT OPENMW_USE_SYSTEM_MYGUI)
+    if(OPENMW_MACOSX_10_5)
+        message(STATUS "Building MyGUI internally")
+    endif()
+
+    set(MYGUI_RENDERSYSTEM 4 CACHE STRING "")
+    set(MYGUI_DISABLE_PLUGINS TRUE CACHE BOOL "")
+    set(MYGUI_BUILD_DEMOS OFF CACHE BOOL "")
+    set(MYGUI_BUILD_PLUGINS OFF CACHE BOOL "")
+    set(MYGUI_BUILD_TOOLS OFF CACHE BOOL "")
+    set(MYGUI_DONT_USE_OBSOLETE ON CACHE BOOL "")
+
+    if(MYGUI_STATIC)
+        set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    else()
+        set(BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
+    endif()
+
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/mygui/CMakeLists.txt)
+        message(STATUS "Using local MyGUI from extern/mygui")
+        set(MYGUI_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/mygui CACHE PATH "" FORCE)
+        if(NOT OPENMW_USE_SYSTEM_OSG)
+            set(OpenSceneGraph_DIR ${CMAKE_CURRENT_BINARY_DIR}/osg CACHE PATH "OSG build dir for MyGUI" FORCE)
+            list(APPEND CMAKE_PREFIX_PATH ${CMAKE_CURRENT_BINARY_DIR}/osg)
+        endif()
+        add_subdirectory(mygui)
+        set(MyGUI_INCLUDE_DIRS ${MYGUI_SOURCE_DIR}/MyGUIEngine/include PARENT_SCOPE)
+        set(MyGUI_LIBRARIES MyGUIEngine PARENT_SCOPE)
+    else()
+        include(FetchContent)
+        FetchContent_Declare(mygui
+            URL https://github.com/MyGUI/mygui/archive/refs/tags/MyGUI3.4.3.zip
+            URL_HASH SHA512=c804ef665e786076582367f171082cd2181fdbd214300ddcca4a4245c5a0f45e62e72778ee2d96ec46b393e22477dd729f9bb3006e6eecbf536674e34a057721
+            SOURCE_DIR fetched/mygui
+        )
+        FetchContent_MakeAvailable(mygui)
+
+        set(MyGUI_INCLUDE_DIRS ${mygui_SOURCE_DIR}/MyGUIEngine/include PARENT_SCOPE)
+        set(MyGUI_LIBRARIES MyGUIEngine PARENT_SCOPE)
+    endif()
 endif()
 
 if(NOT OPENMW_USE_SYSTEM_RECASTNAVIGATION)
@@ -207,6 +309,10 @@ if (BUILD_BENCHMARKS AND NOT OPENMW_USE_SYSTEM_BENCHMARK)
 endif()
 
 if (NOT OPENMW_USE_SYSTEM_YAML_CPP)
+    if(OPENMW_MACOSX_10_5)
+        message(STATUS "Building yaml-cpp internally - this should work on macOS 10.5 PowerPC")
+    endif()
+    
     if(YAML_CPP_STATIC)
         set(YAML_BUILD_SHARED_LIBS OFF)
     else()
@@ -227,6 +333,14 @@ if (NOT OPENMW_USE_SYSTEM_YAML_CPP)
 endif()
 
 if (NOT OPENMW_USE_SYSTEM_ICU)
+    # ICU internal build requires autotools (configure script)
+    # This may not work on macOS 10.5 PowerPC
+    if(OPENMW_MACOSX_10_5)
+        message(WARNING "ICU internal build requires autotools and may fail on macOS 10.5 PowerPC.")
+        message(WARNING "It is strongly recommended to install ICU via MacPorts: sudo port install icu")
+        message(WARNING "If autotools (autoconf, automake, libtool) are not available, ICU build will fail.")
+    endif()
+    
     set(ICU_ENV "ICU_DATA_FILTER_FILE=${CMAKE_CURRENT_SOURCE_DIR}/icufilters.json")
     if (ANDROID)
         # Note: Must be a build directory, not an install root, since the configure script

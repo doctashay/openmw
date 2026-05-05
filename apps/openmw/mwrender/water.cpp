@@ -602,11 +602,13 @@ namespace MWRender
 
         // use a shader to render the simple water, ensuring that fog is applied per pixel as required.
         // this could be removed if a more detailed water mesh, using some sort of paging solution, is implemented.
+#if !defined(OPENMW_MACOSX_10_5)
         Resource::SceneManager* sceneManager = mResourceSystem->getSceneManager();
         bool oldValue = sceneManager->getForceShaders();
         sceneManager->setForceShaders(true);
         sceneManager->recreateShaders(node);
         sceneManager->setForceShaders(oldValue);
+#endif
     }
 
     class ShaderWaterStateSetUpdater : public SceneUtil::StateSetUpdater

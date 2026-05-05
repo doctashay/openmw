@@ -178,6 +178,16 @@ namespace
             return {};
         return name;
     }
+
+    void resetSource(ALuint source)
+    {
+        if (source == 0)
+            return;
+
+        alSourceStop(source);
+        alSourceRewind(source);
+        alSourcei(source, AL_BUFFER, 0);
+    }
 }
 
 namespace MWSound
@@ -297,6 +307,7 @@ namespace MWSound
         std::unique_ptr<Sound_Loudness> mLoudnessAnalyzer;
 
         std::atomic<bool> mIsFinished;
+        std::atomic<bool> mStopped;
 
         OpenAL_SoundStream(const OpenAL_SoundStream& rhs);
         OpenAL_SoundStream& operator=(const OpenAL_SoundStream& rhs);
@@ -462,6 +473,7 @@ namespace MWSound
         , mDecoder(std::move(decoder))
         , mLoudnessAnalyzer(nullptr)
         , mIsFinished(true)
+        , mStopped(false)
     {
         mBuffers.fill(0);
     }
@@ -522,10 +534,17 @@ namespace MWSound
 
     bool OpenAL_SoundStream::isPlaying()
     {
+        if (mStopped || mSource == 0)
+            return false;
+
         ALint state;
 
         alGetSourcei(mSource, AL_SOURCE_STATE, &state);
-        getALError();
+        if (getALError() != AL_NO_ERROR)
+        {
+            mIsFinished = true;
+            return false;
+        }
 
         if (state == AL_PLAYING || state == AL_PAUSED)
             return true;
@@ -589,18 +608,31 @@ namespace MWSound
 
     bool OpenAL_SoundStream::process()
     {
+        if (mStopped || mSource == 0)
+            return false;
+
         try
         {
             if (refillQueue() > 0)
             {
                 ALint state;
                 alGetSourcei(mSource, AL_SOURCE_STATE, &state);
+                if (getALError() != AL_NO_ERROR)
+                {
+                    mIsFinished = true;
+                    return false;
+                }
                 if (state != AL_PLAYING && state != AL_PAUSED)
                 {
                     // Ensure all processed buffers are removed so we don't replay them.
                     refillQueue();
 
                     alSourcePlay(mSource);
+                    if (getALError() != AL_NO_ERROR)
+                    {
+                        mIsFinished = true;
+                        return false;
+                    }
                 }
             }
         }
@@ -1217,8 +1249,7 @@ namespace MWSound
         alSourcef(source, AL_SEC_OFFSET, offset);
         if (getALError() != AL_NO_ERROR)
         {
-            alSourceRewind(source);
-            alSourcei(source, AL_BUFFER, 0);
+            resetSource(source);
             alGetError();
             return false;
         }
@@ -1226,8 +1257,7 @@ namespace MWSound
         alSourcePlay(source);
         if (getALError() != AL_NO_ERROR)
         {
-            alSourceRewind(source);
-            alSourcei(source, AL_BUFFER, 0);
+            resetSource(source);
             alGetError();
             return false;
         }
@@ -1257,8 +1287,7 @@ namespace MWSound
         alSourcef(source, AL_SEC_OFFSET, offset);
         if (getALError() != AL_NO_ERROR)
         {
-            alSourceRewind(source);
-            alSourcei(source, AL_BUFFER, 0);
+            resetSource(source);
             alGetError();
             return false;
         }
@@ -1266,8 +1295,7 @@ namespace MWSound
         alSourcePlay(source);
         if (getALError() != AL_NO_ERROR)
         {
-            alSourceRewind(source);
-            alSourcei(source, AL_BUFFER, 0);
+            resetSource(source);
             alGetError();
             return false;
         }
@@ -1286,14 +1314,13 @@ namespace MWSound
         ALuint source = GET_PTRID(sound->mHandle);
         sound->mHandle = nullptr;
 
-        // Rewind the stream to put the source back into an AL_INITIAL state, for
-        // the next time it's used.
-        alSourceRewind(source);
-        alSourcei(source, AL_BUFFER, 0);
+        resetSource(source);
         getALError();
 
         mFreeSources.push_back(source);
-        mActiveSounds.erase(std::find(mActiveSounds.begin(), mActiveSounds.end(), sound));
+        const auto it = std::find(mActiveSounds.begin(), mActiveSounds.end(), sound);
+        if (it != mActiveSounds.end())
+            mActiveSounds.erase(it);
     }
 
     bool OpenALOutput::isSoundPlaying(Sound* sound)
@@ -1389,17 +1416,18 @@ namespace MWSound
         OpenAL_SoundStream* stream = reinterpret_cast<OpenAL_SoundStream*>(sound->mHandle);
         ALuint source = stream->mSource;
 
+        stream->mStopped = true;
         sound->mHandle = nullptr;
         mStreamThread->remove(stream);
 
-        // Rewind the stream to put the source back into an AL_INITIAL state, for
-        // the next time it's used.
-        alSourceRewind(source);
-        alSourcei(source, AL_BUFFER, 0);
+        resetSource(source);
         getALError();
+        stream->mSource = 0;
 
         mFreeSources.push_back(source);
-        mActiveStreams.erase(std::find(mActiveStreams.begin(), mActiveStreams.end(), sound));
+        const auto it = std::find(mActiveStreams.begin(), mActiveStreams.end(), sound);
+        if (it != mActiveStreams.end())
+            mActiveStreams.erase(it);
 
         delete stream;
     }

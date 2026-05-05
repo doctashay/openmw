@@ -1,5 +1,6 @@
 #include "technique.hpp"
 
+#include <algorithm>
 #include <array>
 #include <format>
 #include <string>
@@ -84,7 +85,8 @@ namespace Fx
         mDescription = {};
         mVersion = {};
         mGLSLExtensions.clear();
-        mGLSLVersion = (mUBO || Stereo::getMultiview()) ? 330 : 120;
+        // Enforce GLSL 1.10 ceiling for OpenGL 2.0 compatibility.
+        mGLSLVersion = 110;
         mGLSLProfile.clear();
         mDynamic = false;
     }
@@ -154,9 +156,14 @@ namespace Fx
 
                 if (Stereo::getMultiview())
                 {
-                    mGLSLExtensions.insert("GL_OVR_multiview");
-                    mGLSLExtensions.insert("GL_OVR_multiview2");
-                    mGLSLExtensions.insert("GL_EXT_texture_array");
+                    if (mGLSLVersion >= 330)
+                    {
+                        mGLSLExtensions.insert("GL_OVR_multiview");
+                        mGLSLExtensions.insert("GL_OVR_multiview2");
+                        mGLSLExtensions.insert("GL_EXT_texture_array");
+                    }
+                    else
+                        Log(Debug::Warning) << "Multiview requested but unsupported under GLSL " << mGLSLVersion;
                 }
 
                 it->second->compile(*this, mShared);
@@ -241,7 +248,7 @@ namespace Fx
             else if (key == "author")
                 mAuthor = parseString();
             else if (key == "glsl_version")
-                mGLSLVersion = std::max(mGLSLVersion, parseInteger());
+                mGLSLVersion = std::min(110, std::max(mGLSLVersion, parseInteger()));
             else if (key == "flags")
                 mFlags = parseFlags();
             else if (key == "hdr")
