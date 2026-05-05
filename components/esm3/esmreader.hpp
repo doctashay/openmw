@@ -317,7 +317,19 @@ namespace ESM
         template <typename X, typename = std::enable_if_t<IsReadable<X>>>
         void getT(X& x)
         {
-            getExact(&x, sizeof(X));
+            if constexpr (std::is_enum_v<X>)
+            {
+                using U = std::underlying_type_t<X>;
+                U value{};
+                getExact(&value, sizeof(value));
+                if constexpr (Misc::IS_BIG_ENDIAN)
+                    value = Misc::fromLittleEndian(value);
+                x = static_cast<X>(value);
+            }
+            else
+            {
+                getExact(&x, sizeof(X));
+            }
             // ESM files are little-endian, convert arithmetic types on big-endian systems
             if constexpr (std::is_arithmetic_v<X> && Misc::IS_BIG_ENDIAN)
                 x = Misc::fromLittleEndian(x);

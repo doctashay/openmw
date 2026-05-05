@@ -120,10 +120,7 @@ namespace Misc
     constexpr bool IS_LITTLE_ENDIAN = false;
     constexpr bool IS_BIG_ENDIAN = true;
 #else
-    // Fallback: assume little-endian for unknown architectures
-    // This can be overridden at compile time if needed
-    constexpr bool IS_LITTLE_ENDIAN = true;
-    constexpr bool IS_BIG_ENDIAN = false;
+#    error "Unable to determine platform byte order"
 #endif
 
     // Usage: swapEndiannessInplaceIf<IS_BIG_ENDIAN>(v)  - native to little-endian or back
