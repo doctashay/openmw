@@ -43,9 +43,19 @@ namespace Misc
 #ifdef _WIN32
     constexpr bool IS_LITTLE_ENDIAN = true;
     constexpr bool IS_BIG_ENDIAN = false;
-#else
-    constexpr bool IS_LITTLE_ENDIAN = __BYTE_ORDER__ != __ORDER_BIG_ENDIAN__;
+#elif defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) && defined(__ORDER_LITTLE_ENDIAN__)
+    // Use compiler-defined byte order if available (GCC 4.6+, Clang)
+    constexpr bool IS_LITTLE_ENDIAN = __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__;
     constexpr bool IS_BIG_ENDIAN = __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__;
+#elif defined(__ppc__) || defined(__ppc64__) || defined(__POWERPC__) || defined(__powerpc__)
+    // PowerPC is big-endian (unless it's a little-endian variant, but classic PPC is big-endian)
+    constexpr bool IS_LITTLE_ENDIAN = false;
+    constexpr bool IS_BIG_ENDIAN = true;
+#else
+    // Fallback: assume little-endian for unknown architectures
+    // This can be overridden at compile time if needed
+    constexpr bool IS_LITTLE_ENDIAN = true;
+    constexpr bool IS_BIG_ENDIAN = false;
 #endif
 
     // Usage: swapEndiannessInplaceIf<IS_BIG_ENDIAN>(v)  - native to little-endian or back
