@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>English</string>
 	<key>CFBundleExecutable</key>
-	<string>openmw-launcher</string>
+	<string>openmw-launcher-cocoa</string>
 	<key>CFBundleIdentifier</key>
 	<string>org.openmw.openmw</string>
 	<key>CFBundleInfoDictionaryVersion</key>

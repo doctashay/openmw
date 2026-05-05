@@ -30,6 +30,7 @@ option(DEPLOY_QT_TRANSLATIONS "Deploy standard Qt translations to resources fold
 # Apps and tools
 option(BUILD_OPENMW             "Build OpenMW" ON)
 option(BUILD_LAUNCHER           "Build Launcher" ON)
+option(BUILD_LAUNCHER_COCOA     "Build native Cocoa launcher" ON)
 option(BUILD_WIZARD             "Build Installation Wizard" ON)
 option(BUILD_MWINIIMPORTER      "Build MWiniImporter" ON)
 option(BUILD_OPENCS             "Build OpenMW Construction Set" ON)
@@ -46,7 +47,6 @@ option(BUILD_BULLETOBJECTTOOL   "Build Bullet object tool" ON)
 option(BUILD_OPENCS_TESTS       "Build OpenMW Construction Set tests" OFF)
 option(BUILD_OPENMW_TESTS       "Build OpenMW tests" OFF)
 option(PRECOMPILE_HEADERS_WITH_MSVC "Precompile most common used headers with MSVC (alternative to ccache)" ON)
-
 set(OpenGL_GL_PREFERENCE LEGACY)  # Use LEGACY as we use GL2; GLNVD is for GL3 and up.
 
 # USE_QT - disabled by default, user can enable if needed
@@ -1458,6 +1458,10 @@ endif()
 
 if (BUILD_LAUNCHER)
     add_subdirectory( apps/launcher )
+endif()
+
+if (APPLE AND BUILD_LAUNCHER_COCOA)
+    add_subdirectory( apps/launcher_cocoa )
 endif()
 
 if (BUILD_MWINIIMPORTER)
