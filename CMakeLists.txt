@@ -49,10 +49,19 @@ option(PRECOMPILE_HEADERS_WITH_MSVC "Precompile most common used headers with MS
 
 set(OpenGL_GL_PREFERENCE LEGACY)  # Use LEGACY as we use GL2; GLNVD is for GL3 and up.
 
-if (BUILD_LAUNCHER OR BUILD_OPENCS OR BUILD_WIZARD OR BUILD_OPENCS_TESTS)
-    set(USE_QT TRUE)
+# USE_QT - auto-detect based on build targets, but allow user override
+# First check if user explicitly provided USE_QT on command line
+if (DEFINED USE_QT)
+    # User explicitly set USE_QT, respect their choice
+    message(STATUS "USE_QT explicitly set to: ${USE_QT}")
 else()
-    set(USE_QT FALSE)
+    # Auto-detect: Qt is needed if building any Qt-dependent applications
+    if (BUILD_LAUNCHER OR BUILD_OPENCS OR BUILD_WIZARD OR BUILD_OPENCS_TESTS)
+        set(USE_QT TRUE)
+    else()
+        set(USE_QT FALSE)
+    endif()
+    message(STATUS "USE_QT auto-detected: ${USE_QT}")
 endif()
 
 # If the user doesn't supply a CMAKE_BUILD_TYPE via command line, choose one for them.
@@ -238,7 +247,7 @@ option(OPENMW_USE_SYSTEM_SQLITE3 "Use system provided SQLite3 library" ON)
 option(OPENMW_USE_SYSTEM_BENCHMARK "Use system Google Benchmark library." OFF)
 option(OPENMW_USE_SYSTEM_GOOGLETEST "Use system Google Test library." OFF)
 
-option(OPENMW_UNITY_BUILD "Use fewer compilation units to speed up compile time" FALSE)
+option(OPENMW_UNITY_BUILD "Use fewer compilation units to speed up compile time" ON)
 option(OPENMW_LTO_BUILD "Build OpenMW with Link-Time Optimization (Needs ~2GB of RAM)" OFF)
 
 # OS X deployment
@@ -327,12 +336,22 @@ endif()
 
 if (USE_QT)
     # Qt version selection for macOS 10.5
-    option(OPENMW_QT_VERSION "Qt version to use (4 or 6)" 6)
+    # Default to Qt4 for macOS 10.5, Qt6 otherwise
+    if(OPENMW_MACOSX_10_5)
+        set(OPENMW_QT_VERSION_DEFAULT 4)
+        message(STATUS "macOS 10.5 detected: defaulting to Qt4")
+    else()
+        set(OPENMW_QT_VERSION_DEFAULT 6)
+    endif()
+    option(OPENMW_QT_VERSION "Qt version to use (4 or 6)" ${OPENMW_QT_VERSION_DEFAULT})
     
     if(OPENMW_MACOSX_10_5)
-        # macOS 10.5 requires Qt4
-        set(OPENMW_QT_VERSION 4 CACHE STRING "Qt version" FORCE)
-        message(STATUS "macOS 10.5 detected: forcing Qt4")
+        # macOS 10.5 requires Qt4 - force it even if user tries to override
+        if(NOT OPENMW_QT_VERSION EQUAL 4)
+            message(WARNING "macOS 10.5 only supports Qt4, forcing Qt4 (ignoring Qt version ${OPENMW_QT_VERSION})")
+            set(OPENMW_QT_VERSION 4 CACHE STRING "Qt version" FORCE)
+        endif()
+        message(STATUS "macOS 10.5 build: using Qt4")
     endif()
     
     if(OPENMW_QT_VERSION EQUAL 4)
@@ -590,7 +609,8 @@ if(OPENMW_USE_SYSTEM_OSG)
     endif()
 endif()
 
-if(OPENMW_USE_SYSTEM_OSG)
+# Always add OSG include directories (for both system and internal builds)
+if(OPENSCENEGRAPH_INCLUDE_DIRS)
     include_directories(BEFORE SYSTEM ${OPENSCENEGRAPH_INCLUDE_DIRS})
 endif()
 
@@ -672,7 +692,8 @@ include_directories(
     ${SOL_CONFIG_DIR}
     ${ICU_INCLUDE_DIRS}
 )
-if(OPENMW_USE_SYSTEM_MYGUI AND MyGUI_INCLUDE_DIRS)
+# Always add MyGUI include directories (for both system and internal builds)
+if(MyGUI_INCLUDE_DIRS)
     include_directories(BEFORE SYSTEM ${MyGUI_INCLUDE_DIRS})
 endif()
 include_directories(".")
@@ -768,25 +789,35 @@ if(OPENMW_LTO_BUILD)
 endif()
 
 if (APPLE)
-    if(OPENMW_MACOSX_10_5)
-        # macOS 10.5: libc++ was introduced in 10.7, but GCC 14 might require it
-        # Try to detect if libc++ is available, otherwise fall back to libstdc++
-        include(CheckCXXCompilerFlag)
-        check_cxx_compiler_flag("-stdlib=libc++" HAS_LIBCXX)
-        
-        if(HAS_LIBCXX)
-            message(STATUS "Using libc++ for macOS 10.5 (GCC 14 compatibility)")
+    # -stdlib flag is Clang-specific, not supported by GCC
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang")
+        if(OPENMW_MACOSX_10_5)
+            # macOS 10.5: libc++ was introduced in 10.7, but Clang might require it
+            # Try to detect if libc++ is available, otherwise fall back to libstdc++
+            include(CheckCXXCompilerFlag)
+            check_cxx_compiler_flag("-stdlib=libc++" HAS_LIBCXX)
+            
+            if(HAS_LIBCXX)
+                message(STATUS "Using libc++ for macOS 10.5 (Clang compatibility)")
+                set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
+                set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
+            else()
+                message(STATUS "libc++ not available, using libstdc++ for macOS 10.5")
+                set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libstdc++")
+                set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libstdc++")
+            endif()
+        else()
+            # Modern macOS: use libc++ with Clang
             set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
             set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
-        else()
-            message(STATUS "libc++ not available, using libstdc++ for macOS 10.5")
-            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libstdc++")
-            set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libstdc++")
         endif()
     else()
-        # Modern macOS: use libc++
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
-        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
+        # GCC: uses libstdc++ by default, no -stdlib flag needed
+        if(OPENMW_MACOSX_10_5)
+            message(STATUS "Using GCC - libstdc++ is default (no -stdlib flag needed)")
+        else()
+            message(STATUS "Using GCC - libstdc++ is default (no -stdlib flag needed)")
+        endif()
     endif()
 endif()
 
