@@ -40,6 +40,10 @@
 
 #include <components/version/version.hpp>
 
+#ifdef __APPLE__
+#include "glwarningdialog.hpp"
+#endif
+
 #include <components/l10n/manager.hpp>
 
 #include <components/loadinglistener/asynclistener.hpp>
@@ -93,6 +97,11 @@ namespace
     {
         if (ret != 0)
             Log(Debug::Error) << "SDL error: " << SDL_GetError();
+    }
+
+    void setGLAttribute(SDL_GLattr attr, int value)
+    {
+        checkSDLError(SDL_GL_SetAttribute(attr, value));
     }
 
     void initStatsHandler(Resource::Profiler& profiler)
@@ -201,7 +210,11 @@ namespace
         int getMaxTextureImageUnits() const
         {
             if (mMaxTextureImageUnits == 0)
-                throw std::logic_error("mMaxTextureImageUnits is not initialized");
+            {
+                Log(Debug::Warning)
+                    << "Warning: mMaxTextureImageUnits not initialized. Using default of 8 (OpenGL 2.0 minimum).";
+                return 8;
+            }
             return mMaxTextureImageUnits;
         }
 
@@ -568,7 +581,8 @@ void OMW::Engine::createWindow()
         posY = SDL_WINDOWPOS_UNDEFINED_DISPLAY(screen);
     }
 
-    Uint32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
+    Uint32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE;
+    flags |= SDL_WINDOW_ALLOW_HIGHDPI;
     if (windowMode == Settings::WindowMode::Fullscreen)
         flags |= SDL_WINDOW_FULLSCREEN;
     else if (windowMode == Settings::WindowMode::WindowedFullscreen)
@@ -585,18 +599,18 @@ void OMW::Engine::createWindow()
 
     int depthBits = 24;
 
-    checkSDLError(SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8));
-    checkSDLError(SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8));
-    checkSDLError(SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8));
-    checkSDLError(SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 0));
-    checkSDLError(SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, depthBits));
+    setGLAttribute(SDL_GL_RED_SIZE, 8);
+    setGLAttribute(SDL_GL_GREEN_SIZE, 8);
+    setGLAttribute(SDL_GL_BLUE_SIZE, 8);
+    setGLAttribute(SDL_GL_ALPHA_SIZE, 0);
+    setGLAttribute(SDL_GL_DEPTH_SIZE, depthBits);
     if (Debug::shouldDebugOpenGL())
-        checkSDLError(SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG));
+        setGLAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
 
     if (antialiasing > 0)
     {
-        checkSDLError(SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1));
-        checkSDLError(SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, antialiasing));
+        setGLAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
+        setGLAttribute(SDL_GL_MULTISAMPLESAMPLES, antialiasing);
     }
 
     osg::ref_ptr<SDLUtil::GraphicsWindowSDL2> graphicsWindow;
@@ -614,7 +628,7 @@ void OMW::Engine::createWindow()
                                         << antialiasing / 2;
                     antialiasing /= 2;
                     Settings::video().mAntialiasing.set(antialiasing);
-                    checkSDLError(SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, antialiasing));
+                    setGLAttribute(SDL_GL_MULTISAMPLESAMPLES, antialiasing);
                     continue;
                 }
                 else
@@ -625,7 +639,7 @@ void OMW::Engine::createWindow()
                         depthBits = 16;
                         Log(Debug::Warning) << "Warning: SDL window creation failed with a 24-bit depth buffer,"
                                             << " retrying with 16-bit depth";
-                        checkSDLError(SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, depthBits));
+                        setGLAttribute(SDL_GL_DEPTH_SIZE, depthBits);
                         continue;
                     }
 #endif
@@ -671,7 +685,7 @@ void OMW::Engine::createWindow()
             mWindow = nullptr;
             antialiasing /= 2;
             Settings::video().mAntialiasing.set(antialiasing);
-            checkSDLError(SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, antialiasing));
+            setGLAttribute(SDL_GL_MULTISAMPLESAMPLES, antialiasing);
             continue;
         }
 
@@ -898,7 +912,13 @@ void OMW::Engine::prepareEngine()
     mResourceSystem->getSceneManager()->setShaderPath(mResDir / "shaders");
 
     osg::GLExtensions& exts = SceneUtil::getGLExtensions();
-    bool shadersSupported = exts.glslLanguageVersion >= 1.2f;
+    if (exts.glslLanguageVersion > 1.1f)
+    {
+        Log(Debug::Warning) << "GLSL " << exts.glslLanguageVersion
+                            << " reported; limiting shader features to GLSL 1.10 for OpenGL 2.0 compatibility.";
+        exts.glslLanguageVersion = 1.1f;
+    }
+    bool shadersSupported = exts.glslLanguageVersion >= 1.1f;
 
 #if defined(OPENMW_MACOSX_10_5)
     shadersSupported = false;
