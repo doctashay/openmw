@@ -580,6 +580,33 @@ else()
     find_package(SQLite3 REQUIRED)
 endif()
 
+# PowerPC may need libatomic for 64-bit atomic operations
+# Check before creating library so we can add fallback source if needed
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "ppc|powerpc" OR CMAKE_OSX_ARCHITECTURES MATCHES "ppc")
+    # Try multiple possible names/locations for libatomic
+    find_library(ATOMIC_LIB 
+        NAMES atomic libatomic
+        PATHS 
+            /opt/local/lib
+            /usr/local/lib
+            /usr/lib
+            ${CMAKE_C_COMPILER}/../lib
+            ${CMAKE_C_COMPILER}/../lib/gcc/${CMAKE_C_COMPILER_TARGET}/*/
+    )
+    
+    if(ATOMIC_LIB)
+        # Store for use by executables
+        set(OPENMW_ATOMIC_LIB ${ATOMIC_LIB} CACHE INTERNAL "libatomic library for PowerPC")
+        message(STATUS "Found libatomic for PowerPC atomic operations: ${ATOMIC_LIB}")
+    else()
+        # libatomic not found - use mutex-based fallback
+        message(STATUS "libatomic not found - using mutex-based fallback for atomic operations")
+        message(STATUS "Note: This is slower but ensures correctness on PowerPC")
+        # Add the fallback implementation to components
+        list(APPEND COMPONENT_FILES "${OpenMW_SOURCE_DIR}/components/misc/atomic_fallback.cpp")
+    endif()
+endif()
+
 add_library(components STATIC ${COMPONENT_FILES})
 
 if (ANDROID)
@@ -627,6 +654,12 @@ target_link_libraries(components
     ${ICU_LIBRARIES}
     ZLIB::ZLIB
     )
+
+# Link libatomic if found (fallback was already added to COMPONENT_FILES if not found)
+if(OPENMW_ATOMIC_LIB)
+    target_link_libraries(components ${OPENMW_ATOMIC_LIB})
+    message(STATUS "Linking libatomic for PowerPC atomic operations: ${OPENMW_ATOMIC_LIB}")
+endif()
 
 if(yaml-cpp_VERSION VERSION_GREATER_EQUAL 0.8.0)
     target_link_libraries(components yaml-cpp::yaml-cpp)

@@ -142,6 +142,11 @@ if (APPLE)
         # Define macros for 10.5 API availability
         add_definitions(-DMAC_OS_X_VERSION_MIN_REQUIRED=1050)
         add_definitions(-DMAC_OS_X_VERSION_MAX_ALLOWED=1050)
+        # Also define the underscored version used by some code
+        add_definitions(-D__MAC_OS_X_VERSION_MIN_REQUIRED=1050)
+        add_definitions(-D__MAC_OS_X_VERSION_MAX_ALLOWED=1050)
+        # Define OPENMW_MACOSX_10_5 for code to use
+        add_definitions(-DOPENMW_MACOSX_10_5=1)
     endif()
     
     if(OPENMW_POWERPC_BUILD)
@@ -625,6 +630,10 @@ endif(HAVE_MULTIVIEW)
 
 set(BOOST_COMPONENTS iostreams program_options)
 
+# Explicitly use shared libraries (MacPorts boost176 is built with +no_static)
+set(Boost_USE_STATIC_LIBS OFF)
+set(Boost_USE_STATIC_RUNTIME OFF)
+
 # Try CONFIG mode first (modern Boost), fallback to MODULE mode (older installations/MacPorts)
 find_package(Boost 1.70.0 CONFIG QUIET COMPONENTS ${BOOST_COMPONENTS} OPTIONAL_COMPONENTS ${BOOST_OPTIONAL_COMPONENTS})
 if(NOT Boost_FOUND)
@@ -633,6 +642,250 @@ if(NOT Boost_FOUND)
 endif()
 if(NOT Boost_FOUND)
     message(FATAL_ERROR "Boost 1.70.0 or later is required. Please install Boost via MacPorts:\n  sudo port install boost\nOr set Boost_ROOT to the Boost installation directory.")
+endif()
+
+# Check Boost ABI compatibility for PowerPC/macOS 10.5
+# MacPorts Boost may be built with Clang/libc++, but we're using GCC/libstdc++
+# IMPORTANT: MacPorts must be configured with 'cxx_stdlib libstdc++' in macports.conf
+# and Boost should be installed with compiler=gcc-14 variant to ensure libstdc++ is used
+# Detect ABI mismatches and stop the build if incompatible
+if(APPLE AND (CMAKE_OSX_ARCHITECTURES MATCHES "ppc" OR OPENMW_POWERPC_BUILD))
+    message(STATUS "Checking Boost ABI compatibility...")
+    message(STATUS "Boost found: ${Boost_VERSION}")
+    message(STATUS "Boost libraries: ${Boost_LIBRARIES}")
+    message(STATUS "")
+    message(STATUS "NOTE: For MacPorts Boost, ensure 'cxx_stdlib libstdc++' is set in macports.conf")
+    message(STATUS "      and install with: sudo port install boost176 compiler=gcc-14")
+    message(STATUS "")
+    
+    # Determine our build's ABI settings
+    set(OUR_STDLIB "unknown")
+    set(OUR_COMPILER_ID "${CMAKE_CXX_COMPILER_ID}")
+    set(OUR_CXX11_ABI "unknown")
+    
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang")
+        # Clang on macOS typically uses libc++
+        set(OUR_STDLIB "libc++")
+    elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        # GCC uses libstdc++ by default
+        set(OUR_STDLIB "libstdc++")
+        # GCC 5.1+ defaults to C++11 ABI (value 1)
+        # Check if we're explicitly setting it
+        if(CMAKE_CXX_FLAGS MATCHES "_GLIBCXX_USE_CXX11_ABI=0")
+            set(OUR_CXX11_ABI "0")
+        else()
+            set(OUR_CXX11_ABI "1")
+        endif()
+    endif()
+    
+    message(STATUS "Our build configuration:")
+    message(STATUS "  Compiler: ${OUR_COMPILER_ID}")
+    message(STATUS "  Standard library: ${OUR_STDLIB}")
+    if(OUR_CXX11_ABI STREQUAL "0" OR OUR_CXX11_ABI STREQUAL "1")
+        message(STATUS "  C++11 ABI: ${OUR_CXX11_ABI}")
+    endif()
+    
+    # Detect Boost's ABI by examining its libraries
+    set(BOOST_STDLIB "unknown")
+    set(BOOST_COMPILER_ID "unknown")
+    set(BOOST_CXX11_ABI "unknown")
+    set(ABI_CHECK_FAILED FALSE)
+    
+    if(Boost_LIBRARIES)
+        list(GET Boost_LIBRARIES 0 FIRST_BOOST_LIB)
+        if(EXISTS "${FIRST_BOOST_LIB}")
+            # Check architecture first
+            execute_process(
+                COMMAND lipo -info "${FIRST_BOOST_LIB}"
+                OUTPUT_VARIABLE BOOST_ARCH_INFO
+                ERROR_QUIET
+            )
+            if(BOOST_ARCH_INFO)
+                message(STATUS "Boost architecture: ${BOOST_ARCH_INFO}")
+            endif()
+            
+            # Use otool -L to check linked standard library
+            execute_process(
+                COMMAND otool -L "${FIRST_BOOST_LIB}"
+                OUTPUT_VARIABLE BOOST_OTOOL_OUTPUT
+                ERROR_QUIET
+            )
+            
+            if(BOOST_OTOOL_OUTPUT)
+                # Check for libc++ (Clang's standard library)
+                if(BOOST_OTOOL_OUTPUT MATCHES "libc\\+\\+")
+                    set(BOOST_STDLIB "libc++")
+                    set(BOOST_COMPILER_ID "likely_Clang")
+                # Check for libstdc++ (GCC's standard library)
+                elseif(BOOST_OTOOL_OUTPUT MATCHES "libstdc\\+\\+")
+                    set(BOOST_STDLIB "libstdc++")
+                    set(BOOST_COMPILER_ID "likely_GCC")
+                endif()
+            endif()
+            
+            # Use nm to check symbol mangling patterns as additional verification
+            # _ZSt indicates libstdc++, _ZNSt indicates libc++
+            execute_process(
+                COMMAND nm -g "${FIRST_BOOST_LIB}" 2>/dev/null | head -20
+                OUTPUT_VARIABLE BOOST_NM_OUTPUT
+                ERROR_QUIET
+            )
+            
+            if(BOOST_NM_OUTPUT)
+                if(BOOST_NM_OUTPUT MATCHES "_ZSt")
+                    if(BOOST_STDLIB STREQUAL "unknown")
+                        set(BOOST_STDLIB "libstdc++")
+                        set(BOOST_COMPILER_ID "likely_GCC")
+                    endif()
+                elseif(BOOST_NM_OUTPUT MATCHES "_ZNSt")
+                    if(BOOST_STDLIB STREQUAL "unknown")
+                        set(BOOST_STDLIB "libc++")
+                        set(BOOST_COMPILER_ID "likely_Clang")
+                    endif()
+                endif()
+            endif()
+            
+            # If we still don't know, try to detect C++11 ABI for libstdc++
+            if(BOOST_STDLIB STREQUAL "libstdc++")
+                # Check for C++11 ABI symbols (new ABI uses different mangling)
+                # This is a heuristic - new ABI symbols are longer
+                execute_process(
+                    COMMAND nm -g "${FIRST_BOOST_LIB}" 2>/dev/null | grep -c "_ZSt" || echo "0"
+                    OUTPUT_VARIABLE BOOST_STD_SYMBOL_COUNT
+                    ERROR_QUIET
+                )
+                # If we find many _ZSt symbols, it's likely using C++11 ABI
+                # This is not 100% reliable but better than nothing
+                if(BOOST_STD_SYMBOL_COUNT)
+                    string(STRIP "${BOOST_STD_SYMBOL_COUNT}" BOOST_STD_SYMBOL_COUNT)
+                    if(BOOST_STD_SYMBOL_COUNT GREATER "10")
+                        set(BOOST_CXX11_ABI "likely_1")
+                    else()
+                        set(BOOST_CXX11_ABI "likely_0")
+                    endif()
+                endif()
+            endif()
+        else()
+            set(ABI_CHECK_FAILED TRUE)
+            message(WARNING "Boost library not found at: ${FIRST_BOOST_LIB}")
+        endif()
+    else()
+        set(ABI_CHECK_FAILED TRUE)
+        message(WARNING "Boost_LIBRARIES is empty")
+    endif()
+    
+    message(STATUS "Boost library analysis:")
+    message(STATUS "  Standard library: ${BOOST_STDLIB}")
+    message(STATUS "  Compiler: ${BOOST_COMPILER_ID}")
+    if(NOT BOOST_CXX11_ABI STREQUAL "unknown")
+        message(STATUS "  C++11 ABI: ${BOOST_CXX11_ABI}")
+    endif()
+    
+    # Compare ABIs and determine compatibility
+    if(NOT ABI_CHECK_FAILED AND NOT BOOST_STDLIB STREQUAL "unknown")
+        set(ABI_MISMATCH FALSE)
+        set(CAN_WORKAROUND FALSE)
+        set(WORKAROUND_APPLIED FALSE)
+        
+        # Case 1: libc++ vs libstdc++ - INCOMPATIBLE, no workaround
+        if(BOOST_STDLIB STREQUAL "libc++" AND OUR_STDLIB STREQUAL "libstdc++")
+            set(ABI_MISMATCH TRUE)
+            message(FATAL_ERROR "\n"
+                "================================================================================\n"
+                "BOOST ABI MISMATCH DETECTED - BUILD CANNOT PROCEED\n"
+                "================================================================================\n"
+                "Boost was built with: ${BOOST_STDLIB} (${BOOST_COMPILER_ID})\n"
+                "OpenMW is building with: ${OUR_STDLIB} (${OUR_COMPILER_ID})\n"
+                "\n"
+                "These are incompatible - libc++ and libstdc++ cannot be mixed.\n"
+                "\n"
+                "SOLUTION: Rebuild Boost with the same compiler and standard library:\n"
+                "\n"
+                "Option 1: Manual build (recommended for PowerPC):\n"
+                "  ./build_boost_ppc.sh\n"
+                "  export Boost_ROOT=/opt/local/boost-gcc14-ppc\n"
+                "\n"
+                "Option 2: MacPorts (ensure cxx_stdlib libstdc++ in macports.conf):\n"
+                "  # Verify MacPorts config has: cxx_stdlib libstdc++\n"
+                "  # Then install with GCC compiler variant:\n"
+                "  sudo port -s install boost176 compiler=gcc-14\n"
+                "  # Or uninstall and reinstall:\n"
+                "  sudo port uninstall boost176\n"
+                "  sudo port install boost176 compiler=gcc-14\n"
+                "\n"
+                "Then rerun CMake with: -D Boost_ROOT=<path_to_boost>\n"
+                "\n"
+                "To verify Boost's runtime, run:\n"
+                "  otool -L $(port file boost176 | grep -A5 'files' | head -1)/lib/libboost_program_options*.dylib\n"
+                "================================================================================\n"
+            )
+        elseif(BOOST_STDLIB STREQUAL "libstdc++" AND OUR_STDLIB STREQUAL "libc++")
+            set(ABI_MISMATCH TRUE)
+            message(FATAL_ERROR "\n"
+                "================================================================================\n"
+                "BOOST ABI MISMATCH DETECTED - BUILD CANNOT PROCEED\n"
+                "================================================================================\n"
+                "Boost was built with: ${BOOST_STDLIB} (${BOOST_COMPILER_ID})\n"
+                "OpenMW is building with: ${OUR_STDLIB} (${OUR_COMPILER_ID})\n"
+                "\n"
+                "These are incompatible - libstdc++ and libc++ cannot be mixed.\n"
+                "\n"
+                "SOLUTION: Rebuild Boost with Clang/libc++ or switch OpenMW to use libstdc++.\n"
+                "================================================================================\n"
+            )
+        # Case 2: Both use libstdc++ but different C++11 ABI - MAYBE workaround
+        elseif(BOOST_STDLIB STREQUAL "libstdc++" AND OUR_STDLIB STREQUAL "libstdc++")
+            if(NOT BOOST_CXX11_ABI STREQUAL "unknown" AND NOT OUR_CXX11_ABI STREQUAL "unknown")
+                if(BOOST_CXX11_ABI MATCHES "likely_0" AND OUR_CXX11_ABI STREQUAL "1")
+                    set(CAN_WORKAROUND TRUE)
+                    message(WARNING "\n"
+                        "================================================================================\n"
+                        "BOOST C++11 ABI MISMATCH DETECTED - ATTEMPTING WORKAROUND\n"
+                        "================================================================================\n"
+                        "Boost appears to use old C++11 ABI (0), but we're using new ABI (1).\n"
+                        "Attempting to match Boost's ABI by setting _GLIBCXX_USE_CXX11_ABI=0\n"
+                        "\n"
+                        "WARNING: This is a workaround and may cause issues. It's better to rebuild\n"
+                        "Boost with matching settings.\n"
+                        "================================================================================\n"
+                    )
+                    add_definitions(-D_GLIBCXX_USE_CXX11_ABI=0)
+                    set(WORKAROUND_APPLIED TRUE)
+                elseif(BOOST_CXX11_ABI MATCHES "likely_1" AND OUR_CXX11_ABI STREQUAL "0")
+                    set(CAN_WORKAROUND TRUE)
+                    message(WARNING "\n"
+                        "================================================================================\n"
+                        "BOOST C++11 ABI MISMATCH DETECTED - ATTEMPTING WORKAROUND\n"
+                        "================================================================================\n"
+                        "Boost appears to use new C++11 ABI (1), but we're using old ABI (0).\n"
+                        "Attempting to match Boost's ABI by setting _GLIBCXX_USE_CXX11_ABI=1\n"
+                        "\n"
+                        "WARNING: This is a workaround and may cause issues. It's better to rebuild\n"
+                        "Boost with matching settings.\n"
+                        "================================================================================\n"
+                    )
+                    add_definitions(-D_GLIBCXX_USE_CXX11_ABI=1)
+                    set(WORKAROUND_APPLIED TRUE)
+                else()
+                    message(STATUS "Boost and OpenMW both use libstdc++ with compatible C++11 ABI settings")
+                endif()
+            else()
+                message(STATUS "Boost and OpenMW both use libstdc++ - ABI should be compatible")
+            endif()
+        # Case 3: Both use libc++ - should be compatible
+        elseif(BOOST_STDLIB STREQUAL "libc++" AND OUR_STDLIB STREQUAL "libc++")
+            message(STATUS "Boost and OpenMW both use libc++ - ABI should be compatible")
+        endif()
+        
+        if(NOT ABI_MISMATCH AND NOT WORKAROUND_APPLIED)
+            message(STATUS "✓ Boost ABI compatibility check passed")
+        endif()
+    else()
+        message(WARNING "Could not fully analyze Boost ABI - proceeding with caution")
+        message(WARNING "If you encounter linker errors (vtable errors, undefined symbols),")
+        message(WARNING "Boost may have been built with a different compiler/ABI.")
+        message(WARNING "Solution: Rebuild Boost with gcc-mp-14 using build_boost_ppc.sh")
+    endif()
 endif()
 
 if(OPENMW_USE_SYSTEM_MYGUI)
