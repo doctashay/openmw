@@ -1,4 +1,4 @@
-#version 120
+#version 110
 #pragma import_defines(FORCE_OPAQUE)
 
 #if @useUBO
@@ -59,7 +59,8 @@ void main()
 
     gl_FragData[0] = applyFogAtDist(gl_FragData[0], euclideanDepth, linearDepth, far);
 
-#if !defined(FORCE_OPAQUE) && @softParticles
+#ifndef FORCE_OPAQUE
+#if @softParticles
     vec2 screenCoords = gl_FragCoord.xy / screenRes;
     vec3 viewVec = normalize(passViewPos.xyz);
     vec3 viewNormal = normalize(gl_NormalMatrix * passNormal);
@@ -76,14 +77,17 @@ void main()
         softFalloffDepth
     );
 #endif
+#endif
 
 #if defined(FORCE_OPAQUE) && FORCE_OPAQUE
     gl_FragData[0].a = 1.0;
 #endif
 
-#if !defined(FORCE_OPAQUE) && !@disableNormals
+#ifndef FORCE_OPAQUE
+#if !@disableNormals
     vec3 viewNormal = normalize(gl_NormalMatrix * passNormal);
     gl_FragData[1].xyz = viewNormal * 0.5 + 0.5;
+#endif
 #endif
 
     applyShadowDebugOverlay();

@@ -1,4 +1,4 @@
-#version 120
+#version 110
 
 #if @useUBO
     #extension GL_ARB_uniform_buffer_object : require
@@ -33,8 +33,8 @@ varying float linearDepth;
 #if PER_PIXEL_LIGHTING
 varying vec3 passViewPos;
 #else
-centroid varying vec3 passLighting;
-centroid varying vec3 shadowDiffuseLighting;
+varying vec3 passLighting;
+varying vec3 shadowDiffuseLighting;
 #endif
 
 varying vec3 passNormal;

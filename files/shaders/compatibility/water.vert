@@ -1,4 +1,4 @@
-#version 120
+#version 110
 
 #include "lib/core/vertex.h.glsl"
 
