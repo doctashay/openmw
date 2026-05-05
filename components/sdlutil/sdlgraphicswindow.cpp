@@ -122,10 +122,29 @@ namespace SDLUtil
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, major);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, minor);
+#else
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
 #endif
 
-        mContext = SDL_GL_CreateContext(mWindow);
-        if (!mContext)
+        auto tryCreateContext = [&]() -> bool
+        {
+            mContext = SDL_GL_CreateContext(mWindow);
+            if (!mContext)
+                return false;
+
+            if (SDL_GL_MakeCurrent(mWindow, mContext) != 0)
+            {
+                SDL_GL_DeleteContext(mContext);
+                mContext = nullptr;
+                return false;
+            }
+
+            return true;
+        };
+
+        if (!tryCreateContext())
         {
 #ifdef OPENMW_MACOSX_10_5
             Log(Debug::Warning)
@@ -134,7 +153,7 @@ namespace SDLUtil
             SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, 0);
             SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 0);
             SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
-            mContext = SDL_GL_CreateContext(mWindow);
+            tryCreateContext();
 #endif
 
             if (!mContext)
